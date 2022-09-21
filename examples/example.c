@@ -28,7 +28,7 @@ int main() {
 
     size_t message_len_dec = 0;
     size_t footer_len = 0;
-    uint8_t *footer;
+    uint8_t *footer = NULL;
     uint8_t *message_dec = paseto_v2_local_decrypt(
             enc, &message_len_dec, key, &footer, &footer_len);
     if (!message_dec) {
@@ -37,5 +37,6 @@ int main() {
     }
     paseto_free(enc);
     printf("decrypted: %s\nfooter: %s\n", message_dec, footer);
+    paseto_free(footer);
     paseto_free(message_dec);
 }

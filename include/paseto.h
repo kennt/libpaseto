@@ -17,6 +17,13 @@ extern "C"{
 #define paseto_v2_PUBLIC_PUBLICKEYBYTES 32U
 #define paseto_v2_PUBLIC_SECRETKEYBYTES 64U
 
+
+#define paseto_v3_LOCAL_NONCEBYTES 32U
+
+#define paseto_v3_LOCAL_KEYBYTES 32U
+#define paseto_v3_PUBLIC_PUBLICKEYBYTES 32U
+#define paseto_v3_PUBLIC_SECRETKEYBYTES 64U
+
 /**
  * Initialize the library. Must be called before using any functionality.
  */
@@ -122,6 +129,99 @@ char *paseto_v2_public_sign(
  * Returns NULL on verification failure.
  */
 uint8_t *paseto_v2_public_verify(
+        const char *encoded, size_t *message_len,
+        const uint8_t key[paseto_v2_PUBLIC_PUBLICKEYBYTES],
+        uint8_t **footer, size_t *footer_len);
+
+
+
+bool paseto_v3_local_load_key_hex(
+        uint8_t key[paseto_v2_LOCAL_KEYBYTES], const char *key_hex);
+
+bool paseto_v3_local_load_key_base64(
+        uint8_t key[paseto_v2_LOCAL_KEYBYTES], const char *key_base64);
+
+char *paseto_v3_local_encrypt(
+        const uint8_t *message, size_t message_len,
+        const uint8_t key[paseto_v2_LOCAL_KEYBYTES],
+        const uint8_t *footer, size_t footer_len,
+        const uint8_t *implicit_assertion, size_t implicit_assertion_len,
+        const uint8_t *nonce, size_t nonce_len);
+
+uint8_t *paseto_v3_local_decrypt(
+        const char *encoded, size_t *message_len,
+        const uint8_t key[paseto_v2_LOCAL_KEYBYTES],
+        uint8_t **footer, size_t *footer_len,
+        const uint8_t *implicit_assertion, size_t implicit_assertion_len);
+
+bool paseto_v3_public_load_public_key_hex(
+        uint8_t key[paseto_v2_PUBLIC_PUBLICKEYBYTES],
+        const char *key_hex);
+
+bool paseto_v3_public_load_public_key_base64(
+        uint8_t key[paseto_v2_PUBLIC_PUBLICKEYBYTES],
+        const char *key_base64);
+
+bool paseto_v3_public_load_secret_key_hex(
+        uint8_t key[paseto_v2_PUBLIC_SECRETKEYBYTES],
+        const char *key_hex);
+
+bool paseto_v3_public_load_secret_key_base64(
+        uint8_t key[paseto_v2_PUBLIC_SECRETKEYBYTES],
+        const char *key_base64);
+
+char *paseto_v3_public_sign(
+        const uint8_t *message, size_t message_len,
+        const uint8_t key[paseto_v2_PUBLIC_SECRETKEYBYTES],
+        const uint8_t *footer, size_t footer_len,
+        const uint8_t *implicit_assertion, size_t implicit_assertion_len);
+
+uint8_t *paseto_v3_public_verify(
+        const char *encoded, size_t *message_len,
+        const uint8_t key[paseto_v2_PUBLIC_PUBLICKEYBYTES],
+        uint8_t **footer, size_t *footer_len,
+        const uint8_t *implicit_assertion, size_t implicit_assertion_len);
+
+
+
+bool paseto_v4_local_load_key_hex(
+        uint8_t key[paseto_v2_LOCAL_KEYBYTES], const char *key_hex);
+
+bool paseto_v4_local_load_key_base64(
+        uint8_t key[paseto_v2_LOCAL_KEYBYTES], const char *key_base64);
+
+char *paseto_v4_local_encrypt(
+        const uint8_t *message, size_t message_len,
+        const uint8_t key[paseto_v2_LOCAL_KEYBYTES],
+        const uint8_t *footer, size_t footer_len);
+
+uint8_t *paseto_v4_local_decrypt(
+        const char *encoded, size_t *message_len,
+        const uint8_t key[paseto_v2_LOCAL_KEYBYTES],
+        uint8_t **footer, size_t *footer_len);
+
+bool paseto_v4_public_load_public_key_hex(
+        uint8_t key[paseto_v2_PUBLIC_PUBLICKEYBYTES],
+        const char *key_hex);
+
+bool paseto_v4_public_load_public_key_base64(
+        uint8_t key[paseto_v2_PUBLIC_PUBLICKEYBYTES],
+        const char *key_base64);
+
+bool paseto_v4_public_load_secret_key_hex(
+        uint8_t key[paseto_v2_PUBLIC_SECRETKEYBYTES],
+        const char *key_hex);
+
+bool paseto_v4_public_load_secret_key_base64(
+        uint8_t key[paseto_v2_PUBLIC_SECRETKEYBYTES],
+        const char *key_base64);
+
+char *paseto_v4_public_sign(
+        const uint8_t *message, size_t message_len,
+        const uint8_t key[paseto_v2_PUBLIC_SECRETKEYBYTES],
+        const uint8_t *footer, size_t footer_len);
+
+uint8_t *paseto_v4_public_verify(
         const char *encoded, size_t *message_len,
         const uint8_t key[paseto_v2_PUBLIC_PUBLICKEYBYTES],
         uint8_t **footer, size_t *footer_len);
