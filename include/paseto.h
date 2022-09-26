@@ -185,12 +185,6 @@ bool paseto_v3_public_load_secret_key_base64(
         uint8_t key[paseto_v3_PUBLIC_SECRETKEYBYTES],
         const char *key_base64);
 
-bool paseto_v3_is_public_key(
-        uint8_t *key, size_t key_len);
-
-bool paseto_v3_is_secret_key(
-        uint8_t *key, size_t key_len);
-
 bool paseto_v3_public_generate_keys(
         const uint8_t *seed, size_t seed_len,
         uint8_t *public_key, size_t public_key_len,
@@ -245,12 +239,6 @@ bool paseto_v4_public_load_secret_key_hex(
 bool paseto_v4_public_load_secret_key_base64(
         uint8_t key[paseto_v4_PUBLIC_SECRETKEYBYTES],
         const char *key_base64);
-
-bool paseto_v4_is_public_key(
-        uint8_t *key, size_t key_len);
-
-bool paseto_v4_is_secret_key(
-        uint8_t *key, size_t key_len);
 
 bool paseto_v4_public_generate_keys(
         const uint8_t *seed, size_t seed_len,

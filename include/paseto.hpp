@@ -711,7 +711,7 @@ public:
 };
 
 
-template<enum KeyType key_type, size_t key_length, auto fkeycheck, auto fverify>
+template<enum KeyType key_type, size_t key_length, auto fverify>
 class PublicKey2 : public Key
 {
 public:
@@ -747,7 +747,7 @@ public:
 };
 
 
-template<enum KeyType key_type, size_t key_length, auto fkeycheck, auto fsign>
+template<enum KeyType key_type, size_t key_length, auto fsign>
 class SecretKey2 : public Key
 {
 public:
@@ -800,11 +800,9 @@ typedef LocalKey2<KeyType::V3_LOCAL,
             paseto_v3_local_decrypt> PasetoV3LocalKey;
 typedef PublicKey2<KeyType::V3_PUBLIC,
             paseto_v3_PUBLIC_PUBLICKEYBYTES,
-            paseto_v3_is_public_key,
             paseto_v3_public_verify> PasetoV3PublicKey;
 typedef SecretKey2<KeyType::V3_SECRET,
             paseto_v3_PUBLIC_SECRETKEYBYTES,
-            paseto_v3_is_secret_key,
             paseto_v3_public_sign> PasetoV3SecretKey;
 
 typedef LocalKey2<KeyType::V4_LOCAL,
@@ -813,11 +811,9 @@ typedef LocalKey2<KeyType::V4_LOCAL,
             paseto_v4_local_decrypt> PasetoV4LocalKey;
 typedef PublicKey2<KeyType::V4_PUBLIC,
             paseto_v4_PUBLIC_PUBLICKEYBYTES,
-            paseto_v4_is_public_key,
             paseto_v4_public_verify> PasetoV4PublicKey;
 typedef SecretKey2<KeyType::V4_SECRET,
             paseto_v4_PUBLIC_SECRETKEYBYTES,
-            paseto_v4_is_secret_key,
             paseto_v4_public_sign> PasetoV4SecretKey;
 
 class Keys

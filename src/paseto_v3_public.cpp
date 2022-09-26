@@ -18,7 +18,6 @@ using std::endl;
 using CryptoPP::Integer;
 
 #include "cryptopp/oids.h"
-using namespace CryptoPP::ASN1;
 
 #include "cryptopp/eccrypto.h"
 using CryptoPP::ECP;
@@ -35,16 +34,6 @@ using CryptoPP::AutoSeededRandomPool;
 
 #include "cryptopp/sha.h"
 using CryptoPP::SHA384;
-
-#if 0
-paseto_static_assert(
-        paseto_v3_PUBLIC_PUBLICKEYBYTES == crypto_sign_PUBLICKEYBYTES,
-        "PUBLICKEYBYTES mismatch");
-paseto_static_assert(
-        paseto_v3_PUBLIC_SECRETKEYBYTES == crypto_sign_SECRETKEYBYTES,
-        "SECRETKEYBYTES mismatch");
-#endif
-
 
 static const uint8_t header[] = "v3.public.";
 static const size_t header_len = sizeof(header) - 1;
@@ -77,36 +66,42 @@ bool paseto_v3_public_load_secret_key_base64(
     return key_load_base64(key, paseto_v3_PUBLIC_SECRETKEYBYTES, key_base64);
 }
 
-bool paseto_v3_is_public_key(
-        uint8_t *key, size_t key_len)
-{
-    if (key_len != paseto_v3_PUBLIC_PUBLICKEYBYTES)
-        return false;
-    return true;
-    //return !paseto_v3_is_secret_key(key, key_len);
-}
-
-bool paseto_v3_is_secret_key(
-        uint8_t *key, size_t key_len)
-{
-    if (key_len != paseto_v3_PUBLIC_SECRETKEYBYTES)
-        return false;
-    return true;
-}
-
 bool paseto_v3_public_generate_keys(
         const uint8_t *seed, size_t seed_len,
         uint8_t *public_key, size_t public_key_len,
         uint8_t *secret_key, size_t secret_key_len)
 {
-    if (seed_len != crypto_sign_SEEDBYTES ||
-        public_key_len != crypto_sign_PUBLICKEYBYTES ||
+    if (public_key_len != crypto_sign_PUBLICKEYBYTES ||
         secret_key_len != crypto_sign_SECRETKEYBYTES)
     {
         errno = EINVAL;
         return false;
     }
-    crypto_sign_seed_keypair(public_key, secret_key, seed);
+
+    ECDSA_RFC6979<ECP,SHA384>::PrivateKey seckey;
+    ECDSA_RFC6979<ECP,SHA384>::PublicKey pubkey;
+    AutoSeededRandomPool prng;
+    std::stringstream ostream;
+
+    /* generate the secret key */
+    seckey.Initialize( prng, CryptoPP::ASN1::secp384r1() );
+    ostream << std::hex << std::noshowbase << seckey.GetPrivateExponent();
+    std::string seckey_hex = ostream.str();
+    ostream.clear();
+
+    /* generate the public key (point compressed) */
+    seckey.MakePublicKey(pubkey);
+    const ECP::Point& q = pubkey.GetPublicElement();
+    ostream << (q.y.GetBit(0) ? "03" : "02") << std::hex << std::noshowbase << q.x;
+    std::string pubkey_hex = ostream.str();
+
+    /* remove the 'h' at the end of the string */
+    seckey_hex.resize(seckey_hex.length()-1);
+    pubkey_hex.resize(pubkey_hex.length()-1);
+
+    /* convert to binary */
+    key_load_hex(public_key, public_key_len, pubkey_hex.c_str());
+    key_load_hex(secret_key, secret_key_len, seckey_hex.c_str());
     return true;
 }
 
@@ -138,7 +133,6 @@ char *paseto_v3_public_sign(
         
         if (!secret_key.Validate(prng, 3))
         {
-            std::cerr << "secret key validation failed " << __LINE__ << std::endl;
             errno = EINVAL;
             return NULL;
         }
@@ -208,9 +202,16 @@ char *paseto_v3_public_sign(
     {
         ECDSA_RFC6979<ECP,SHA384>::Signer signer( secret_key );
 
-        signer.SignMessage(prng,
-                           pa.base, pre_auth_len,
-                           sig);
+        size_t siglen = signer.SignMessage(prng,
+                            pa.base, pre_auth_len,
+                            sig);
+        if (siglen != signature_len)
+        {
+            fprintf(stderr, "unexpected signature length: actual:%zu expected:%zu\n",
+                siglen, signature_len);
+            errno = EINVAL;
+            return NULL;
+        }
     }
     free(pa.base);
 
@@ -245,7 +246,11 @@ uint8_t *paseto_v3_public_verify(
         const char *encoded, size_t *message_len,
         const uint8_t key[paseto_v3_PUBLIC_PUBLICKEYBYTES],
         uint8_t **footer, size_t *footer_len,
-        const uint8_t *implicit_assertion, size_t implicit_assertion_len) {
+        const uint8_t *implicit_assertion, size_t implicit_assertion_len)
+{
+    if (footer) *footer = NULL;
+    if (footer_len) *footer_len = 0;
+
     if (!encoded || !message_len || !key) {
         errno = EINVAL;
         return NULL;
@@ -269,9 +274,6 @@ uint8_t *paseto_v3_public_verify(
         public_key.AccessGroupParameters().Initialize(CryptoPP::ASN1::secp384r1());
 
         ECP::Point point;
- 
-        //StringSource ss (key, true, new CryptoPP::HexDecoder);
-        //public_key.GetGroupParameters().GetCurve().DecodePoint (point, ss, ss.MaxRetrievable());
         public_key.GetGroupParameters().GetCurve().DecodePoint (point, key, paseto_v3_PUBLIC_PUBLICKEYBYTES);
         public_key.SetPublicElement(point);
 
@@ -283,112 +285,88 @@ uint8_t *paseto_v3_public_verify(
         }
     }
 
-    const char *encoded_end = strchr(encoded, '.');
-    if (!encoded_end) encoded_end = encoded + encoded_len;
-    const size_t decoded_maxlen = encoded_end - encoded;
-    uint8_t *decoded = (uint8_t *) malloc(decoded_maxlen);
-    if (!decoded) {
-        errno = ENOMEM;
-        return NULL;
-    }
+    /* #2. May check the footer */
+    /* #3. Verify the message header */
 
-    size_t decoded_len;
-    const char *encoded_footer;
-    if (sodium_base642bin(
-            decoded, decoded_maxlen,
-            encoded, encoded_len,
-            NULL, &decoded_len,
-            &encoded_footer,
-            sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
-        free(decoded);
-        errno = EINVAL;
-        return NULL;
-    }
-
-    const size_t internal_message_len = decoded_len - signature_len;
-    const uint8_t *signature = decoded + internal_message_len;
-
-    size_t encoded_footer_len = strlen(encoded_footer);
+    /* #4. Decode the payload */
+    uint8_t *decoded;
     uint8_t *decoded_footer = NULL;
     size_t decoded_footer_len = 0;
+    uint8_t *message;
+    size_t internal_message_len;
+    uint8_t *sig;
 
-    if (encoded_footer_len > 1) {
-        // footer present and one or more bytes long
-        // skip '.'
-        encoded_footer_len--;
-        encoded_footer++;
+    {
+        uint8_t *body = NULL;
+        size_t body_len = 0;
 
-        decoded_footer = (uint8_t *) malloc(encoded_footer_len);
+        decoded = decode_input(
+                         encoded, encoded_len,
+                         &body, &body_len,
+                         &decoded_footer, &decoded_footer_len);
+        if (!decoded)
+        {
+            errno = EINVAL;
+            return NULL;
+        }
 
-        if (sodium_base642bin(
-                decoded_footer, encoded_len - decoded_len,
-                encoded_footer, encoded_footer_len,
-                NULL, &decoded_footer_len,
-                NULL,
-                sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
-            free(decoded);
+        message = body;
+        internal_message_len = body_len - signature_len;
+        sig = body + internal_message_len;
+    }
+
+    /* #5. Pack pk,h,m,f, and i using PAE */
+    struct pre_auth pa;
+    size_t pre_auth_len;
+
+    {
+        if (!pre_auth_init(&pa, 5,
+                paseto_v3_PUBLIC_PUBLICKEYBYTES +
+                header_len +
+                internal_message_len +
+                decoded_footer_len +
+                implicit_assertion_len))
+        {
             free(decoded_footer);
+            free(decoded);
+            errno = ENOMEM;
+            return NULL;
+        }
+        pre_auth_append(&pa, key, paseto_v3_PUBLIC_PUBLICKEYBYTES);
+        pre_auth_append(&pa, header, header_len);
+        pre_auth_append(&pa, message, internal_message_len);
+        pre_auth_append(&pa, decoded_footer, decoded_footer_len);
+        pre_auth_append(&pa, implicit_assertion, implicit_assertion_len);
+        pre_auth_len = pa.current - pa.base;
+    }
+
+    /* #6. Use ECSDA to verify the signature */
+    {
+        ECDSA_RFC6979<ECP,SHA384>::Verifier verifier(public_key);
+        if (!verifier.VerifyMessage(pa.base, pre_auth_len,
+                sig, signature_len))
+        {
+            free(pa.base);
+            free(decoded_footer);
+            free(decoded);
             errno = EINVAL;
             return NULL;
         }
     }
-
-    struct pre_auth pa;
-    if (!pre_auth_init(&pa, 3,
-            header_len + internal_message_len + decoded_footer_len)) {
-        free(decoded);
-        free(decoded_footer);
-        errno = ENOMEM;
-        return NULL;
-    }
-    pre_auth_append(&pa, header, header_len);
-    pre_auth_append(&pa, decoded, internal_message_len);
-    pre_auth_append(&pa, decoded_footer, decoded_footer_len);
-    size_t pre_auth_len = pa.current - pa.base;
-
-
-    uint8_t *message = (uint8_t *) malloc(internal_message_len + 1);
-    if (!message) {
-        free(decoded);
-        free(decoded_footer);
-        free(pa.base);
-        errno = ENOMEM;
-        return NULL;
-    }
-    if (crypto_sign_verify_detached(
-            signature, pa.base, pre_auth_len, key) != 0) {
-        free(decoded);
-        free(decoded_footer);
-        free(pa.base);
-        free(message);
-        errno = EINVAL;
-        return NULL;
-    }
-
-    memcpy(message, decoded, internal_message_len);
-    message[internal_message_len] = '\0';
-
     free(pa.base);
-    free(decoded);
 
-    if (decoded_footer && footer && footer_len) {
-        uint8_t *internal_footer = (uint8_t *) malloc(decoded_footer_len + 1);
-        if (!internal_footer) {
-            free(decoded_footer);
-            free(message);
-            errno = ENOMEM;
-            return NULL;
-        }
-        memcpy(internal_footer, decoded_footer, decoded_footer_len);
-        internal_footer[decoded_footer_len] = '\0';
-        *footer = internal_footer;
+    /* #7. If valid, return m */
+
+    /* zero out the signature portion of the decoded buffer */
+    memset(sig, 0x00, signature_len);
+
+    if (footer)
+        *footer = decoded_footer;
+    else
+        free(decoded_footer);
+
+    if (footer_len)
         *footer_len = decoded_footer_len;
-    } else {
-        if (footer) *footer = NULL;
-        if (footer_len) *footer_len = 0;
-    }
-
-    free(decoded_footer);
 
     *message_len = internal_message_len;
 

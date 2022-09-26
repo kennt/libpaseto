@@ -13,8 +13,10 @@ int main() {
     string encrypted;
 
     auto localkey = paseto::Keys::createFromBase64(
-                        paseto::KeyType::V4_LOCAL, keydata);
+                        paseto::KeyType::V3_LOCAL, keydata);
 
+    // Two different ways of doing the same thing
+    // A BinaryView removes making a copy of the data
     paseto::BinaryView message_view {message};
     auto footer_view = paseto::BinaryView::fromString(footer);
 

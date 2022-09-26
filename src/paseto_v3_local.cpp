@@ -223,7 +223,11 @@ uint8_t *paseto_v3_local_decrypt(
         const char *encoded, size_t *message_len,
         const uint8_t key[paseto_v3_LOCAL_KEYBYTES],
         uint8_t **footer, size_t *footer_len,
-        const uint8_t *implicit_assertion, size_t implicit_assertion_len) {
+        const uint8_t *implicit_assertion, size_t implicit_assertion_len)
+{
+    if (footer) *footer = NULL;
+    if (footer_len) *footer_len = 0;
+
     if (!encoded || !message_len || !key) {
         errno = EINVAL;
         return NULL;
@@ -239,14 +243,12 @@ uint8_t *paseto_v3_local_decrypt(
                     sodium_base64_VARIANT_URLSAFE_NO_PADDING) - 1;
         if (strlen(encoded) < minimum_len)
         {
-            std::cerr << "initial checks failed " << __LINE__ << std::endl;
             errno = EINVAL;
             return NULL;
         }
 
         if (memcmp(encoded, header, header_len) != 0)
         {
-            std::cerr << "header check failed " << __LINE__ << std::endl;
             errno = EINVAL;
             return NULL;
         }
@@ -257,28 +259,36 @@ uint8_t *paseto_v3_local_decrypt(
     const size_t encoded_len = strlen(encoded);
     uint8_t *decoded_footer = NULL;
     size_t decoded_footer_len = 0;
-    uint8_t *body = NULL;
-    size_t body_len = 0;
+    uint8_t * decoded;
 
-    uint8_t * decoded = decode_input(
+    uint8_t *nonce;
+    size_t nonce_len;
+    uint8_t *ciphertext;
+    size_t ciphertext_len;
+    uint8_t *digest;
+
+    {
+        uint8_t *body = NULL;
+        size_t body_len = 0;
+
+        decoded = decode_input(
                      encoded, encoded_len,
                      &body, &body_len,
                      &decoded_footer, &decoded_footer_len);
-    if (!decoded)
-    {
-        std::cerr << "check failed " << __LINE__ << std::endl;
-        errno = EINVAL;
-        return NULL;
-    }
+        if (!decoded)
+        {
+            errno = EINVAL;
+            return NULL;
+        }
 
-    uint8_t *nonce = body;
-    size_t nonce_len = paseto_v3_LOCAL_NONCEBYTES;
+        nonce = body;
+        nonce_len = paseto_v3_LOCAL_NONCEBYTES;
     
-    uint8_t *ciphertext = body + nonce_len;
-    size_t ciphertext_len;
+        ciphertext = body + nonce_len;
+        ciphertext_len = body_len - nonce_len - mac_len;
 
-    uint8_t *digest = body + body_len - mac_len;
-    ciphertext_len = digest - ciphertext;
+        digest = body + nonce_len + ciphertext_len;
+    }
 
     /* #5. Split the key using HKDF */
     uint8_t enc_key[32];
@@ -321,7 +331,7 @@ uint8_t *paseto_v3_local_decrypt(
                 decoded_footer_len +
                 implicit_assertion_len))
         {
-            std::cerr << "check failed " << __LINE__ << std::endl;
+            free(decoded_footer);
             free(decoded);
             errno = ENOMEM;
             return NULL;
@@ -345,10 +355,8 @@ uint8_t *paseto_v3_local_decrypt(
 
         if (sodium_memcmp(digest, digest2, mac_len) != 0)
         {
-            std::cout << std::endl;
-            dumpHex("digest : ", digest, mac_len);
-            dumpHex("digest2: ", digest2, mac_len);
             std::cerr << "digest failed " << __LINE__ << std::endl;
+            free(decoded_footer);
             free(decoded);
             return NULL;
         }
@@ -369,6 +377,7 @@ uint8_t *paseto_v3_local_decrypt(
         if (plaintext_len != ciphertext_len)
         {
             fprintf(stderr, "ciphertext length is not the same as plaintext length");
+            free(decoded_footer);
             free(decoded);
             errno = EINVAL;
             return NULL;
@@ -376,7 +385,7 @@ uint8_t *paseto_v3_local_decrypt(
         plaintext = (uint8_t *) malloc(plaintext_len+1);
         if (plaintext == NULL)
         {
-            std::cerr << "check failed " << __LINE__ << std::endl;
+            free(decoded_footer);
             free(decoded);
             errno = ENOMEM;
             return NULL;
@@ -387,23 +396,13 @@ uint8_t *paseto_v3_local_decrypt(
         plaintext[plaintext_len] = '\0';
     }
 
-    if (decoded_footer && footer && footer_len) {
-        uint8_t *internal_footer = (uint8_t *) malloc(decoded_footer_len + 1);
-        if (!internal_footer) {
-            std::cerr << "check failed " << __LINE__ << std::endl;
-            free(decoded);
-            free(plaintext);
-            errno = ENOMEM;
-            return NULL;
-        }
-        memcpy(internal_footer, decoded_footer, decoded_footer_len);
-        internal_footer[decoded_footer_len] = '\0';
-        *footer = internal_footer;
+    if (footer)
+        *footer = decoded_footer;
+    else
+        free(decoded_footer);
+
+    if (footer_len)
         *footer_len = decoded_footer_len;
-    } else {
-        if (footer) *footer = NULL;
-        if (footer_len) *footer_len = 0;
-    }
 
     free(decoded);
 

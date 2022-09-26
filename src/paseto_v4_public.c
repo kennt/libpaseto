@@ -50,25 +50,6 @@ bool paseto_v4_public_load_secret_key_base64(
     return key_load_base64(key, paseto_v4_PUBLIC_SECRETKEYBYTES, key_base64);
 }
 
-bool paseto_v4_is_public_key(
-        uint8_t *key,
-        size_t key_len)
-{
-    if (key_len != paseto_v4_PUBLIC_PUBLICKEYBYTES)
-        return false;
-    return true;
-}
-
-bool paseto_v4_is_secret_key(
-        uint8_t *key,
-        size_t key_len)
-{
-    if (key_len != paseto_v4_PUBLIC_SECRETKEYBYTES)
-        return false;
-    uint8_t pk[paseto_v4_PUBLIC_SECRETKEYBYTES];
-    return crypto_sign_ed25519_sk_to_seed(pk, key) == 0;
-}
-
 bool paseto_v4_public_generate_keys(
         const uint8_t *seed, size_t seed_len,
         uint8_t *public_key, size_t public_key_len,
@@ -109,20 +90,24 @@ char *paseto_v4_public_sign(
 
     /* #3. Pack h,m,f, and i using PAE */
     struct pre_auth pa;
-    if (!pre_auth_init(&pa, 4,
-                header_len +
-                message_len +
-                footer_len +
-                implicit_assertion_len)) {
-        free(to_encode);
-        errno = ENOMEM;
-        return NULL;
+    size_t pre_auth_len;
+
+    {
+        if (!pre_auth_init(&pa, 4,
+                    header_len +
+                    message_len +
+                    footer_len +
+                    implicit_assertion_len)) {
+            free(to_encode);
+            errno = ENOMEM;
+            return NULL;
+        }
+        pre_auth_append(&pa, header, header_len);
+        pre_auth_append(&pa, message, message_len);
+        pre_auth_append(&pa, footer, footer_len);
+        pre_auth_append(&pa, implicit_assertion, implicit_assertion_len);
+        pre_auth_len = pa.current - pa.base;
     }
-    pre_auth_append(&pa, header, header_len);
-    pre_auth_append(&pa, message, message_len);
-    pre_auth_append(&pa, footer, footer_len);
-    pre_auth_append(&pa, implicit_assertion, implicit_assertion_len);
-    size_t pre_auth_len = pa.current - pa.base;
 
     /* #4. Sign using Ed25519 */
     if (crypto_sign_detached(to_encode + message_len, NULL,
@@ -186,83 +171,55 @@ uint8_t *paseto_v4_public_verify(
 
 
     /* #4. Decode the payload andf footer */
-    size_t encoded_len = strlen(encoded);
-
-    const char *encoded_end = strchr(encoded, '.');
-    if (!encoded_end) encoded_end = encoded + encoded_len;
-    const size_t decoded_maxlen = encoded_end - encoded;
-    uint8_t *decoded = malloc(decoded_maxlen);
-    if (!decoded) {
-        errno = ENOMEM;
-        return NULL;
-    }
-
-    size_t decoded_len;
-    const char *encoded_footer;
-    if (sodium_base642bin(
-            decoded, decoded_maxlen,
-            encoded, encoded_len,
-            NULL, &decoded_len,
-            &encoded_footer,
-            sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
-        free(decoded);
-        errno = EINVAL;
-        return NULL;
-    }
-
-    const size_t internal_message_len = decoded_len - signature_len;
-    const uint8_t *signature = decoded + internal_message_len;
-
-    size_t encoded_footer_len = strlen(encoded_footer);
+    const size_t encoded_len = strlen(encoded);
     uint8_t *decoded_footer = NULL;
     size_t decoded_footer_len = 0;
+    uint8_t * decoded;
 
-    if (encoded_footer_len > 1) {
-        // footer present and one or more bytes long
-        // skip '.'
-        encoded_footer_len--;
-        encoded_footer++;
+    uint8_t *message;
+    size_t internal_message_len;
+    uint8_t *signature;
 
-        decoded_footer = malloc(encoded_footer_len);
+    {
+        uint8_t *body = NULL;
+        size_t body_len = 0;
 
-        if (sodium_base642bin(
-                decoded_footer, encoded_len - decoded_len,
-                encoded_footer, encoded_footer_len,
-                NULL, &decoded_footer_len,
-                NULL,
-                sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
-            free(decoded);
-            free(decoded_footer);
+        decoded = decode_input(
+                     encoded, encoded_len,
+                     &body, &body_len,
+                     &decoded_footer, &decoded_footer_len);
+        if (!decoded)
+        {
             errno = EINVAL;
             return NULL;
         }
+
+        message = body;
+        internal_message_len = body_len - signature_len;
+
+        signature = body + internal_message_len;
     }
 
     /* #5. Pack h,m,f, and i using PAE */
     struct pre_auth pa;
-    if (!pre_auth_init(&pa, 4,
-            header_len +
-            internal_message_len +
-            decoded_footer_len +
-            implicit_assertion_len)) {
-        free(decoded);
-        free(decoded_footer);
-        errno = ENOMEM;
-        return NULL;
-    }
-    pre_auth_append(&pa, header, header_len);
-    pre_auth_append(&pa, decoded, internal_message_len);
-    pre_auth_append(&pa, decoded_footer, decoded_footer_len);
-    pre_auth_append(&pa, implicit_assertion, implicit_assertion_len);
-    size_t pre_auth_len = pa.current - pa.base;
+    size_t pre_auth_len;
 
-    uint8_t *message = malloc(internal_message_len + 1);
-    if (!message) {
-        free(decoded);
-        free(decoded_footer);
-        free(pa.base);
-        errno = ENOMEM;
-        return NULL;
+    {
+        if (!pre_auth_init(&pa, 4,
+                header_len +
+                internal_message_len +
+                decoded_footer_len +
+                implicit_assertion_len)) {
+            free(decoded);
+            free(decoded_footer);
+            errno = ENOMEM;
+            return NULL;
+        }
+        pre_auth_append(&pa, header, header_len);
+        pre_auth_append(&pa, decoded, internal_message_len);
+        pre_auth_append(&pa, decoded_footer, decoded_footer_len);
+        pre_auth_append(&pa, implicit_assertion, implicit_assertion_len);
+        pre_auth_len = pa.current - pa.base;
     }
 
     /* #6. Use Ed25519 to verify the signature */
@@ -271,38 +228,35 @@ uint8_t *paseto_v4_public_verify(
         free(decoded);
         free(decoded_footer);
         free(pa.base);
-        free(message);
         errno = EINVAL;
         return NULL;
     }
 
     /* #7. If valid, return the message and footer */
-    memcpy(message, decoded, internal_message_len);
+    uint8_t *outmessage = malloc(internal_message_len + 1);
+    if (!message) {
+        free(decoded);
+        free(decoded_footer);
+        free(pa.base);
+        errno = ENOMEM;
+        return NULL;
+    }
+
+    memcpy(outmessage, decoded, internal_message_len);
     message[internal_message_len] = '\0';
 
     free(pa.base);
     free(decoded);
 
-    if (decoded_footer && footer && footer_len) {
-        uint8_t *internal_footer = malloc(decoded_footer_len + 1);
-        if (!internal_footer) {
-            free(decoded_footer);
-            free(message);
-            errno = ENOMEM;
-            return NULL;
-        }
-        memcpy(internal_footer, decoded_footer, decoded_footer_len);
-        internal_footer[decoded_footer_len] = '\0';
-        *footer = internal_footer;
-        *footer_len = decoded_footer_len;
-    } else {
-        if (footer) *footer = NULL;
-        if (footer_len) *footer_len = 0;
-    }
+    if (footer)
+        *footer = decoded_footer;
+    else
+        free(decoded_footer);
 
-    free(decoded_footer);
+    if (footer_len)
+        *footer_len = decoded_footer_len;
 
     *message_len = internal_message_len;
 
-    return message;
+    return outmessage;
 }

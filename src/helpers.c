@@ -166,21 +166,28 @@ uint8_t * decode_input(
     uint8_t *decoded_footer = NULL;
     size_t decoded_footer_len = 0;
 
-    if (encoded_footer_len > 1) {
+    if (encoded_footer_len > 1 && footer) {
         // footer present and one or more bytes long
         // skip '.'
         encoded_footer_len--;
         encoded_footer++;
 
-        // use memory after the decoded data for the decoded footer
-        decoded_footer = decoded + real_decoded_len;
+        // allocate new memory (need to do this anyway)
+        decoded_footer = (uint8_t *) malloc(encoded_footer_len);
+        if (decoded_footer == NULL)
+        {
+            free(decoded);
+            errno = ENOMEM;
+            return NULL;
+        }
 
         if (sodium_base642bin(
-                decoded_footer, decoded_len - real_decoded_len,
+                decoded_footer, encoded_footer_len,
                 encoded_footer, encoded_footer_len,
                 NULL, &decoded_footer_len,
                 NULL,
                 sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
+            free(decoded_footer);
             free(decoded);
             errno = EINVAL;
             return NULL;
