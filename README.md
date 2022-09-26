@@ -5,9 +5,32 @@ Additions:
 - v3/v4 implementations (with a C interface)
 - A C++ header-only interface for versions 2/3/4
 - an additional test executable that runs through the json test vectors
+- a Dockerfile to use for building
+- a Makefile to help with the Docker builds
 
 Restrictions:
 - The C++ code relies on C++ 17.
+
+```
+  # Builds the docker image used for the build system
+  make build-docker-image
+
+  # Startup the docker container
+  make start
+
+  # Runs the cmake build
+  make build
+
+  # Runs the test progams as well as the unit tests
+  make test
+
+  # Stop the docker container
+  make stop
+
+  # Removes the build directory
+  make clean
+```
+
 
 ```
 #include "paseto.hpp"
