@@ -18,8 +18,6 @@ RUN apt-get update && \
 		pkg-config \
 		cmake-data \
 		llvm \
-		libcrypto++-dev \
 		libsodium-dev
-
 
 CMD ["tail", "-f", "/dev/null"]
