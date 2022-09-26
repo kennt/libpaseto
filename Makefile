@@ -131,10 +131,10 @@ clean: ## Clean build directory
 example: ## Run the examples
 	@if [ "${IF_CONTAINER_RUNS}" != "true" ]; then \
 		docker run ${DOCKER_BASIC_RUN_PARAMS} \
-			${DOCKER_SHELL} -c "cd ${DOCKER_BUILD_DIR} && ./cppexample2"; \
+			${DOCKER_SHELL} -c "cd ${DOCKER_BUILD_DIR} && ./cppexample"; \
 	else \
 		docker exec -it ${DOCKER_DEPS_CONTAINER} \
-			${DOCKER_SHELL} -c "cd ${DOCKER_BUILD_DIR} && ./cppexample2"; \
+			${DOCKER_SHELL} -c "cd ${DOCKER_BUILD_DIR} && ./cppexample"; \
 	fi
 
 .PHONY: login
