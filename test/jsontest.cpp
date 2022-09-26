@@ -6,13 +6,26 @@
 #include <fstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <cstdio>
 
 #define DEBUG
 #include "paseto.hpp"
 
 using json = nlohmann::json;
+using namespace std;
 
-void run_test_vector(const std::string path,
+size_t getNonceLength(paseto::KeyType k)
+{
+    switch (paseto::KeyTypeVersion(k))
+    {
+        case 2: return paseto_v2_LOCAL_NONCEBYTES;
+        case 3: return paseto_v3_LOCAL_NONCEBYTES;
+        case 4: return paseto_v4_LOCAL_NONCEBYTES;
+        default: return 0;
+    }
+}
+
+void run_test_vector(const string path,
                      paseto::KeyType local_encode_keytype,
                      paseto::KeyType local_dedode_keytype,
                      paseto::KeyType public_encode_keytype,
@@ -42,7 +55,7 @@ int main(int argc, char **argv)
 }
 
 
-void run_test_vector(const std::string pathToFile,
+void run_test_vector(const string pathToFile,
                      paseto::KeyType local_encode_keytype,
                      paseto::KeyType local_decode_keytype,
                      paseto::KeyType public_encode_keytype,
@@ -53,37 +66,53 @@ void run_test_vector(const std::string pathToFile,
         json j;
 
         // v2
-        assert(std::filesystem::exists(pathToFile));
-        std::ifstream fstream(pathToFile);
+        assert(filesystem::exists(pathToFile));
+        ifstream fstream(pathToFile);
         j = json::parse(fstream);
-        std::cout << "----------------------------------------" << std::endl;
-        std::cout << "File: " << pathToFile
-                  << "  Name: " << j["name"] << std::endl;
+        cout << "----------------------------------------" << endl;
+        cout << "File: " << pathToFile
+                  << "  Name: " << j["name"] << endl;
 
         for (const auto& element : j["tests"])
         {
-            std::string name = element["name"].get<std::string>();
+            string name = element["name"].get<string>();
             bool expect_fail = element["expect-fail"].get<bool>();
-            std::string result;
-            std::string stoken = element["token"].get<std::string>();
-            std::string footer = element["footer"].get<std::string>();
-            std::string payload;
+            string result;
+            string stoken = element["token"].get<string>();
+            string footer = element["footer"].get<string>();
+            string implicit_assertion = element["implicit-assertion"].get<string>();
+            string payload;
 
-            std::cout << "Test: " <<  name;
-            std::cout << "  expect-fail:" << expect_fail;
+            cout << "Test: " <<  name;
+            cout << "  expect-fail:" << expect_fail;
 
             if (element.contains("public-key"))
             {
-                std::string spublic_key = element["public-key"].get<std::string>();
-                std::string ssecret_key = element["secret-key"].get<std::string>();
+                string spublic_key = element["public-key"].get<string>();
+                string ssecret_key = element["secret-key"].get<string>();
+                string seed;
+                if (element.contains("secret-key-seed"))
+                {
+                    seed = element["secret-key-seed"].get<string>();
+                    auto seed_bytes = paseto::Binary::fromHex(seed);
+                    auto key_pair = paseto::KeyGen::generatePair(
+                                        public_decode_keytype, seed_bytes);
+                    if (key_pair.first->toHex() != spublic_key)
+                        cerr << "Seed-generated public key doesn't match up" << endl;
+                    if (key_pair.second->toHex() != ssecret_key)
+                        cerr << "Seed-generated secret key doesn't match up" << endl;
+                }
                 paseto::BinaryVector payload_bytes;
                 if (!element["payload"].is_null())
                 {
-                    payload = element["payload"].get<std::string>();
+                    payload = element["payload"].get<string>();
                     payload_bytes = paseto::Binary::fromString(payload);
                 }
                 paseto::BinaryVector footer_bytes = 
                             paseto::Binary::fromString(footer);
+                paseto::BinaryVector ia_bytes;
+                if (KeyTypeVersion(local_encode_keytype) > 2)
+                    ia_bytes = paseto::Binary::fromString(implicit_assertion);
                 bool encryption_test_ok = false;
 
                 auto seckey = paseto::Keys::createFromHex(
@@ -94,83 +123,95 @@ void run_test_vector(const std::string pathToFile,
 
                 try
                 {
-                    result = seckey->sign(payload_bytes, footer_bytes);
+                    result = seckey->sign(payload_bytes, footer_bytes, ia_bytes);
                 }
-                catch (std::exception &ex)
+                catch (exception &ex)
                 {
                     // ignore for now
                 }
                 encryption_test_ok = (stoken == result);
                 if (!result.empty())
-                    std::cout << "  result:" << encryption_test_ok;
+                    cout << "  result:" << encryption_test_ok;
                 else
-                    std::cout << "  result:" << "null";
+                    cout << "  result:" << "null";
                 if (encryption_test_ok || expect_fail)
-                    std::cout << " signing:pass";
+                    cout << " signing:pass";
                 else
-                    std::cout << " signing;FAILED";
+                    cout << " signing:FAILED";
 
                 paseto::Token token;
                 try
                 {
-                    token = pubkey->verify(stoken);
+                    token = pubkey->verify(stoken, ia_bytes);
                 }
-                catch (std::exception)
+                catch (exception)
                 {
                 }
 
                 if (!token.payload().empty())
-                    std::cout << "  result:" << (token.payload() == payload_bytes);
+                    cout << "  result:" << (token.payload() == payload_bytes);
                 else
-                    std::cout << "  result:" << "null";
+                    cout << "  result:" << "null";
 
                 if ((!token.payload().empty() && payload_bytes == token.payload()) || expect_fail)
-                    std::cout << " verify:pass";
+                    cout << " verify:pass";
                 else
-                    std::cout << " verify:FAILED";
+                    cout << " verify:FAILED";
 
-                //std::cout << " result:" << (token.payload() == payload_bytes);
-                std::cout << std::endl;
+                //cout << " result:" << (token.payload() == payload_bytes);
+                cout << endl;
+                //cout << "stoken:" << stoken << std::endl;
+                //cout << "result:" << result << std::endl;
             }
             else
             {
-                std::string skey = element["key"].get<std::string>();
-                std::string nonce = element["nonce"].get<std::string>();
+                string skey = element["key"].get<string>();
+                string nonce = element["nonce"].get<string>();
 
                 // encryption test
                 {
                     paseto::BinaryVector payload_bytes;
                     paseto::BinaryVector footer_bytes = 
                             paseto::Binary::fromString(footer);
+                    paseto::BinaryVector ia_bytes;
+                    if (KeyTypeVersion(local_encode_keytype) > 2)
+                        ia_bytes = paseto::Binary::fromString(implicit_assertion);
                     bool encryption_test_ok = false;
 
                     if (!element["payload"].is_null())
                     {
-                        payload = element["payload"].get<std::string>();
+                        payload = element["payload"].get<string>();
                         payload_bytes = paseto::Binary::fromString(payload);
                     }
 
-                    std::unique_ptr<paseto::Key> key =
+                    unique_ptr<paseto::Key> key =
                             paseto::Keys::createFromHex(local_encode_keytype, skey);
 
-                    if (nonce.length() == 2 * paseto_v2_LOCAL_NONCEBYTES)
+                    if (nonce.length() == 2 * getNonceLength(local_encode_keytype))
                     {
                         key->setNonce(nonce, payload_bytes);
 
-                        result = key->encrypt(payload_bytes, footer_bytes);
+                        try
+                        {
+                            result = key->encrypt(payload_bytes, footer_bytes, ia_bytes);
+                        }
+                        catch (exception ex)
+                        {
+                            // ignore
+                        }
 
                         key->clearNonce();
                     }
                     encryption_test_ok = (stoken == result);
                     if (!result.empty())
-                        std::cout << "  result:" << encryption_test_ok;
+                        cout << "  result:" << encryption_test_ok;
                     else
-                        std::cout << "  result:" << "null";
+                        cout << "  result:" << "null";
 
                     if (encryption_test_ok || expect_fail)
-                        std::cout << " encrypt:pass ";
+                        cout << " encrypt:pass ";
                     else
-                        std::cout << " encrypt:FAILED ";
+                        cout << " encrypt:FAILED ";
                     result.clear();
                 }
 
@@ -178,11 +219,14 @@ void run_test_vector(const std::string pathToFile,
                 {
                     paseto::BinaryVector payload_bytes;
                     paseto::BinaryVector footer_bytes = paseto::Binary::fromString(footer);
+                    paseto::BinaryVector ia_bytes;
+                    if (KeyTypeVersion(local_encode_keytype) > 2)
+                        ia_bytes = paseto::Binary::fromString(implicit_assertion);
                     bool decryption_test_ok = false;
 
                     if (!element["payload"].is_null())
                     {
-                        payload = element["payload"].get<std::string>();
+                        payload = element["payload"].get<string>();
                         payload_bytes = paseto::Binary::fromString(payload);
                     }
 
@@ -190,33 +234,40 @@ void run_test_vector(const std::string pathToFile,
                          local_decode_keytype, skey);
 
                     paseto::Token token;
-                    if (nonce.length() == 2 * paseto_v2_LOCAL_NONCEBYTES)
+
+                    if (nonce.length() == 2 * getNonceLength(local_encode_keytype))
                     {
-                        token = key->decrypt(stoken);
+                        try
+                        {
+                            token = key->decrypt(stoken, ia_bytes);
+                        }
+                        catch (exception ex)
+                        {
+                        }
                     }
                 
                     decryption_test_ok = (token.payload() == payload_bytes);
                     decryption_test_ok &= (token.footer() == footer_bytes);
 
                     if (!token.payload().empty())
-                        std::cout << " result:" << decryption_test_ok;
+                        cout << " result:" << decryption_test_ok;
                     else
-                        std::cout << " result:" << "null";
+                        cout << " result:" << "null";
 
                     if ((!token.payload().empty() && payload_bytes == token.payload()) || expect_fail)
-                        std::cout << " decrypt:pass";
+                        cout << " decrypt:pass";
                     else
-                        std::cout << " decrypt:FAILED";
+                        cout << " decrypt:FAILED";
                 }
 
-                std::cout << std::endl;
+                cout << endl;
             }
         }
     }
-    catch (std::exception &ex)
+    catch (exception &ex)
     {
-        std::cout << std::endl << ex.what() << std::endl;
-        std::cout << "caught an exception, continuing..." << std::endl;
+        cout << endl << ex.what() << endl;
+        cout << "caught an exception, continuing..." << endl;
     }
     return;
 }

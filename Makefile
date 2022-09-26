@@ -127,6 +127,16 @@ clean: ## Clean build directory
 		${DOCKER_SHELL} -c \
 		"rm -rf ${DOCKER_BUILD_DIR}"
 
+.PHONY: example
+example: ## Run the examples
+	@if [ "${IF_CONTAINER_RUNS}" != "true" ]; then \
+		docker run ${DOCKER_BASIC_RUN_PARAMS} \
+			${DOCKER_SHELL} -c "cd ${DOCKER_BUILD_DIR} && ./cppexample2"; \
+	else \
+		docker exec -it ${DOCKER_DEPS_CONTAINER} \
+			${DOCKER_SHELL} -c "cd ${DOCKER_BUILD_DIR} && ./cppexample2"; \
+	fi
+
 .PHONY: login
 login: ## Login to the container. if already running, login into existing one
 	@if [ "${IF_CONTAINER_RUNS}" != "true" ]; then \

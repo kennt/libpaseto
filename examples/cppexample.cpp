@@ -1,7 +1,4 @@
 
-extern "C" {
-#include "paseto.h"
-};
 #include "paseto.hpp"
 
 #include <iostream>
@@ -12,17 +9,14 @@ using namespace std;
 int main() {
     string message("test");
     string footer("footer");
-    string key("jPGxsBcnjnruJJe3cF4dnjo1LVM-g8O6ktboqggzi2c");
+    string keydata("jPGxsBcnjnruJJe3cF4dnjo1LVM-g8O6ktboqggzi2c");
     string encrypted;
 
     auto localkey = paseto::Keys::createFromBase64(
-                        paseto::KeyType::V2_LOCAL, key);
+                        paseto::KeyType::V4_LOCAL, keydata);
 
-    auto message_view = paseto::BinaryView::fromString(message);
+    paseto::BinaryView message_view {message};
     auto footer_view = paseto::BinaryView::fromString(footer);
-
-    encrypted = localkey->encrypt(message_view);
-    cout << "encrypted: " << encrypted << endl;
 
     encrypted = localkey->encrypt(message_view, footer_view);
     cout << "encrypted: " << encrypted << endl;

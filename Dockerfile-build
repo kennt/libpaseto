@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 WORKDIR /libpaseto
 
@@ -13,12 +13,12 @@ RUN apt-get update && \
 		clang \
 		gdb \
 		cmake \
-		gdb \
 		git \
 		ca-certificates \
 		pkg-config \
 		cmake-data \
 		llvm \
+		libcrypto++-dev \
 		libsodium-dev
 
 

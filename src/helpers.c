@@ -71,3 +71,126 @@ bool key_load_base64(uint8_t *key, size_t key_len, const char *key_base64) {
     }
     return true;
 }
+
+char * encode_output(size_t *dest_len,
+                   const uint8_t *header, size_t header_len,
+                   const uint8_t *body, size_t body_len,
+                   const uint8_t *footer, size_t footer_len)
+{
+    size_t output_len = header_len;
+    output_len += sodium_base64_ENCODED_LEN(body_len,
+            sodium_base64_VARIANT_URLSAFE_NO_PADDING) - 1; // minus included trailing NULL byte
+    if (footer) 
+        output_len += sodium_base64_ENCODED_LEN(footer_len,
+            sodium_base64_VARIANT_URLSAFE_NO_PADDING) - 1 + 1; // minus included NULL byte, plus '.' separator
+    output_len += 1; // trailing NULL byte
+    char *output = (char *) malloc(output_len);
+    if (!output) {
+        errno = ENOMEM;
+        return NULL;
+    }
+
+    char * output_current = output;
+    size_t output_len_remaining = output_len;
+
+    if (output_len_remaining < header_len)
+    {
+        free(output);
+        return NULL;
+    }
+    memcpy(output_current, header, header_len);
+    output_current += header_len;
+    output_len_remaining -= header_len;
+
+    sodium_bin2base64(
+            output_current, output_len_remaining,
+            body, body_len,
+            sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+
+    size_t encoded_len = strlen(output_current);
+    if (output_len_remaining < encoded_len)
+    {
+        free(output);
+        return NULL;
+    }
+    output_current += encoded_len;
+    output_len_remaining -= encoded_len;
+
+    if (footer && footer_len) {
+        *output_current++ = '.';
+        output_len_remaining--;
+        sodium_bin2base64(
+                output_current, output_len_remaining,
+                footer, footer_len,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+    }
+    if (dest_len)
+        *dest_len = strlen(output)+1;
+    return output;
+}
+
+
+uint8_t * decode_input(
+                  const char *encoded, size_t encoded_len,
+                  uint8_t **body, size_t *body_len,
+                  uint8_t **footer, size_t *footer_len)
+{
+    size_t decoded_len = encoded_len;
+    uint8_t *decoded = (uint8_t *) malloc(decoded_len);
+    if (!decoded) {
+        errno = ENOMEM;
+        return NULL;
+    }
+
+    const char *encoded_footer;
+    size_t real_decoded_len;
+    if (sodium_base642bin(
+            decoded, decoded_len,
+            encoded, encoded_len,
+            NULL, &real_decoded_len,
+            &encoded_footer,
+            sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
+        free(decoded);
+        errno = EINVAL;
+        return NULL;
+    }
+    // after base64 decoding there should be at least enough data to store the
+    // nonce as well as the signature
+    if (encoded_len < real_decoded_len) {
+        free(decoded);
+        errno = EINVAL;
+        return NULL;
+    }
+
+    size_t encoded_footer_len = strlen(encoded_footer);
+    uint8_t *decoded_footer = NULL;
+    size_t decoded_footer_len = 0;
+
+    if (encoded_footer_len > 1) {
+        // footer present and one or more bytes long
+        // skip '.'
+        encoded_footer_len--;
+        encoded_footer++;
+
+        // use memory after the decoded data for the decoded footer
+        decoded_footer = decoded + real_decoded_len;
+
+        if (sodium_base642bin(
+                decoded_footer, decoded_len - real_decoded_len,
+                encoded_footer, encoded_footer_len,
+                NULL, &decoded_footer_len,
+                NULL,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
+            free(decoded);
+            errno = EINVAL;
+            return NULL;
+        }
+    }
+    *body = decoded;
+    *body_len = real_decoded_len;
+    if (footer)
+        *footer = decoded_footer;
+    if (footer_len)
+        *footer_len = decoded_footer_len;
+    return decoded;
+}

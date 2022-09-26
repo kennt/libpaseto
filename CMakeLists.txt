@@ -13,6 +13,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Ensure --std=c++xx instead of --std=g++xx
 set(CMAKE_CXX_EXTENSIONS OFF)
+add_definitions(-Wno-deprecated)
 
 # ----------------------------------------------------------------------------
 # ASAN config
@@ -43,8 +44,10 @@ include_directories(include)
 set(PASETO_SOURCES
 	src/paseto_v2_local.c
 	src/paseto_v2_public.c
-	src/paseto_v3_local.c
-	src/paseto_v3_public.c
+	src/paseto_v3_local.cpp
+	src/paseto_v3_public.cpp
+	src/paseto_v4_local.c
+	src/paseto_v4_public.c
 	src/paseto.c
 	src/helpers.c
 	src/helpers.h
@@ -52,16 +55,24 @@ set(PASETO_SOURCES
 
 configure_file("paseto.pc.in" "paseto.pc" @ONLY)
 
+find_library(CRYPTOCPP_LIBRARIES crypto++ /usr/lib/x86_64-linux-gnu)
 
 # shared library build
 add_library(paseto SHARED ${PASETO_SOURCES})
-target_link_libraries(paseto ${SODIUM_LIBRARIES})
+target_link_libraries(paseto
+	${SODIUM_LIBRARIES}
+	${CRYPTOCPP_LIBRARIES}
+	)
+#target_include_directories(paseto
+#	PUBLIC
+#	/usr/include/crypto++
+#	)
 install(TARGETS paseto
 	LIBRARY DESTINATION lib
 	ARCHIVE DESTINATION lib)
 install(FILES
 	include/paseto.h
-	include/paseto2.hpp
+	include/paseto.hpp
 	DESTINATION include)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/paseto.pc"
 	DESTINATION lib/pkgconfig)
@@ -147,14 +158,12 @@ foreach(EXAMPLE ${EXAMPLES})
 	target_link_libraries(${EXAMPLE} ${SODIUM_LIBRARIES} paseto)
 endforeach()
 
-add_executable(cppexample examples/example.cpp)
-target_link_libraries(cppexample
-	paseto
-	${SODIUM_LIBRARIES}
-	fmt::fmt-header-only)
 
-message(STATUS "CMAKE_C_COMPILER: ${CMAKE_C_COMPILER}")
-message(STATUS "CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
-message(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")
-message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
-message(STATUS "CMAKE_C_LINK_FLAGS: ${CMAKE_C_LINK_FLAGS}")
+set(CPPEXAMPLES cppexample cppexample2)
+foreach(CPPEXAMPLE ${CPPEXAMPLES})
+	add_executable(${CPPEXAMPLE} examples/${CPPEXAMPLE}.cpp)
+	target_link_libraries(${CPPEXAMPLE}
+		paseto
+		${SODIUM_LIBRARIES}
+		fmt::fmt-header-only)
+endforeach()
