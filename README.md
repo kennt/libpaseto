@@ -1,16 +1,30 @@
 # C/C++ library for Paseto
 This is a work-in-progress.
 
-Additions:
+### Additions:
 - v3/v4 implementations (with a C interface)
 - A C++ header-only interface for versions 2/3/4
 - an additional test executable that runs through the json test vectors
 - a Dockerfile to use for building
 - a Makefile to help with the Docker builds
 
-Restrictions:
+### Restrictions:
 - The C++ code relies on C++ 17.
 
+### Additional source dependencies (although these are downloaded/built via CMake).
+- Crypto++ (or CryptoPP) libraries (used for non-libsodium crypto).
+- nlohmann-JSON
+- fmt
+- Catch2
+
+### TODO:
+- some code reorg
+- testing
+- docs
+- paserk
+
+
+### Sample make/Docker-based workflow
 ```
   # Builds the docker image used for the build system
   make build-docker-image
@@ -32,6 +46,7 @@ Restrictions:
 ```
 
 
+### Example C++ code
 ```
 #include "paseto.hpp"
 
