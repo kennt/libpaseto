@@ -14,7 +14,7 @@ DOCKER_DEPS_IMAGE_BUILD_FLAGS?=--no-cache=true
 DOCKER_PREPEND_MAKEFILES?=
 DOCKER_APPEND_MAKEFILES?=
 
-DOCKER_CMAKE_FLAGS?=-DWITH_ASAN=1
+DOCKER_CMAKE_FLAGS?=-DWITH_ASAN=1 -G Ninja
 
 DOCKER_SHELL?=bash
 LOCAL_SOURCE_PATH?=${CURDIR}
@@ -73,12 +73,12 @@ build: gen_cmake ## Build source. To build a specific target: make TARGET=<targe
 		docker run ${DOCKER_BASIC_RUN_PARAMS} \
 			${DOCKER_SHELL} -c \
 			"cd ${DOCKER_BUILD_DIR} && \
-			make -j 4 ${TARGET}"; \
+			ninja ${TARGET}"; \
 	else \
 		docker exec -it ${DOCKER_DEPS_CONTAINER} \
 			${DOCKER_SHELL} -c \
 			"cd ${DOCKER_BUILD_DIR} && \
-			make -j 4 ${TARGET}"; \
+			ninja ${TARGET}"; \
 	fi
 	@echo
 	@echo "Build finished. The binaries are in ${CURDIR}/${DOCKER_BUILD_DIR}"
