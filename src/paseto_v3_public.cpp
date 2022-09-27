@@ -66,13 +66,26 @@ bool paseto_v3_public_load_secret_key_base64(
     return key_load_base64(key, paseto_v3_PUBLIC_SECRETKEYBYTES, key_base64);
 }
 
+#if 0
+void dumpHex(const char *title, int lineno, const uint8_t * data, size_t data_len)
+{
+    std::string data_hex;
+
+    data_hex.resize(2*data_len+1);
+    sodium_bin2hex(data_hex.data(), data_hex.length(),
+        data, data_len);
+
+    cout << title << " (" << lineno << ") : " << std::hex << data_hex << std::dec << endl;
+}
+#endif
+
 bool paseto_v3_public_generate_keys(
         const uint8_t *seed, size_t seed_len,
         uint8_t *public_key, size_t public_key_len,
         uint8_t *secret_key, size_t secret_key_len)
 {
-    if (public_key_len != crypto_sign_PUBLICKEYBYTES ||
-        secret_key_len != crypto_sign_SECRETKEYBYTES)
+    if (public_key_len != paseto_v3_PUBLIC_PUBLICKEYBYTES ||
+        secret_key_len != paseto_v3_PUBLIC_SECRETKEYBYTES)
     {
         errno = EINVAL;
         return false;
@@ -82,29 +95,50 @@ bool paseto_v3_public_generate_keys(
     ECDSA_RFC6979<ECP,SHA384>::PublicKey pubkey;
     AutoSeededRandomPool prng;
     std::stringstream ostream;
+    std::string pubkey_hex;
+    std::string seckey_hex;
+
+    seckey_hex.reserve(2*paseto_v3_PUBLIC_SECRETKEYBYTES + 1);
+    pubkey_hex.reserve(2*paseto_v3_PUBLIC_PUBLICKEYBYTES + 1);
 
     /* generate the secret key */
     seckey.Initialize( prng, CryptoPP::ASN1::secp384r1() );
+
     ostream << std::hex << std::noshowbase << seckey.GetPrivateExponent();
-    std::string seckey_hex = ostream.str();
-    ostream.clear();
+    seckey_hex.append(ostream.str());
+    seckey_hex.resize(seckey_hex.length()-1);   // remove 'h' at the end
+    std::stringstream().swap(ostream);
+
+    /* ensure that we are zero-filled on the left */
+    ostream.width(2*paseto_v3_PUBLIC_SECRETKEYBYTES);
+    ostream.fill('0');
+    ostream << seckey_hex;
+    seckey_hex = ostream.str();
+    std::stringstream().swap(ostream);
 
     /* generate the public key (point compressed) */
     seckey.MakePublicKey(pubkey);
     const ECP::Point& q = pubkey.GetPublicElement();
-    ostream << (q.y.GetBit(0) ? "03" : "02") << std::hex << std::noshowbase << q.x;
-    std::string pubkey_hex = ostream.str();
 
-    /* remove the 'h' at the end of the string */
-    seckey_hex.resize(seckey_hex.length()-1);
-    pubkey_hex.resize(pubkey_hex.length()-1);
+    pubkey_hex.append(q.y.GetBit(0) ? "03" : "02");
+
+    ostream << std::hex << std::noshowbase << q.x;
+    std::string pubkey_data = ostream.str();
+    pubkey_data.resize(pubkey_data.length()-1);   // remove 'h' at the end
+    std::stringstream().swap(ostream);  // reset ostream
+
+    /* ensure that we are zero-filled on the left */
+    ostream.width(2*paseto_v3_PUBLIC_PUBLICKEYBYTES-2);
+    ostream.fill('0');
+    ostream << pubkey_data;
+    pubkey_hex.append(ostream.str());
 
     /* convert to binary */
     key_load_hex(public_key, public_key_len, pubkey_hex.c_str());
     key_load_hex(secret_key, secret_key_len, seckey_hex.c_str());
+
     return true;
 }
-
 
 char *paseto_v3_public_sign(
         const uint8_t *message, size_t message_len,
@@ -133,6 +167,7 @@ char *paseto_v3_public_sign(
         
         if (!secret_key.Validate(prng, 3))
         {
+            fprintf(stderr, "secret key validate() failed (%d)\n", __LINE__);
             errno = EINVAL;
             return NULL;
         }
@@ -141,7 +176,6 @@ char *paseto_v3_public_sign(
     /* #2. set header */
 
     /* #3. pack pk,h,m,f, and i using PAE, then sign */
-    std::string pubkey_hex;
     uint8_t pubkey_bin[paseto_v3_PUBLIC_PUBLICKEYBYTES];
     size_t pubkey_bin_len = sizeof(pubkey_bin);
 
@@ -152,12 +186,23 @@ char *paseto_v3_public_sign(
         /* get pubkey as point-compressed */
         const ECP::Point& q = public_key.GetPublicElement();
 
+        /* convert q.x into a hex string */
+        std::string pubkey_hex;
         std::stringstream ostream;
-        ostream << (q.y.GetBit(0) ? "03" : "02") << std::hex << std::noshowbase << q.x;
-        pubkey_hex = ostream.str();
 
-        /* remove the 'h' at the end of the string */
-        pubkey_hex.resize(pubkey_hex.length()-1);
+        pubkey_hex.reserve(2*paseto_v3_PUBLIC_PUBLICKEYBYTES + 1);
+        pubkey_hex.append(q.y.GetBit(0) ? "03" : "02");
+
+        ostream << std::hex << std::noshowbase << q.x;
+        std::string pubkey_data = ostream.str();
+        pubkey_data.resize(pubkey_data.length()-1);   // remove 'h' at the end
+
+        /* ensure that we are zero-filled on the left */
+        std::stringstream().swap(ostream);  // reset ostream
+        ostream.width(2*paseto_v3_PUBLIC_PUBLICKEYBYTES-2);
+        ostream.fill('0');
+        ostream << pubkey_data;
+        pubkey_hex.append(ostream.str());
 
         size_t len = 0;
 
@@ -167,6 +212,8 @@ char *paseto_v3_public_sign(
             pubkey_hex.data(), pubkey_hex.length(),
             NULL, &len, NULL) != 0)
         {
+            fprintf(stderr, "hex2bin failed dest-len(%zu) src-len(%zu) (%d)\n",
+                pubkey_bin_len, pubkey_hex.length(), __LINE__);
             errno = EINVAL;
             return NULL;
         }
@@ -181,8 +228,8 @@ char *paseto_v3_public_sign(
                 pubkey_bin_len +
                 header_len +
                 message_len +
-                footer_len + // footer
-                implicit_assertion_len // implicit
+                footer_len +
+                implicit_assertion_len
                 ))
         {
             errno = EINVAL;
@@ -232,6 +279,7 @@ char *paseto_v3_public_sign(
                        footer, footer_len);
     if (output == NULL)
     {
+        fprintf(stderr, "encode_output failed (%d)\n", __LINE__);
         free(to_encode);
         errno = EINVAL;
         return NULL;
@@ -280,6 +328,7 @@ uint8_t *paseto_v3_public_verify(
         // validate the pk
         if (!public_key.Validate(prng, 3))
         {
+            fprintf(stderr, "public key validate() failed %d\n", __LINE__);
             errno = EINVAL;
             return NULL;
         }
@@ -340,12 +389,13 @@ uint8_t *paseto_v3_public_verify(
         pre_auth_len = pa.current - pa.base;
     }
 
-    /* #6. Use ECSDA to verify the signature */
+    /* #6. Use ECDSA to verify the signature */
     {
         ECDSA_RFC6979<ECP,SHA384>::Verifier verifier(public_key);
         if (!verifier.VerifyMessage(pa.base, pre_auth_len,
                 sig, signature_len))
         {
+            fprintf(stderr, "verify() failed %d\n", __LINE__);
             free(pa.base);
             free(decoded_footer);
             free(decoded);

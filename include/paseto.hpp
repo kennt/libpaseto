@@ -117,6 +117,16 @@ public:
         BinaryView bin_view(s);
         return bin_view;        
     }
+
+    std::string toHex() const
+    {
+        std::string result;
+        result.resize(2*this->size()+1);
+        sodium_bin2hex(result.data(), result.length(), this->data(), this->size());
+        result.resize(2*this->size());
+        return result;
+    }
+
 };
 
 class BinaryVector : public std::vector<uint8_t>

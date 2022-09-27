@@ -19,15 +19,15 @@ extern "C"{
 #define paseto_v2_PUBLIC_SECRETKEYBYTES 64U
 
 
-#define paseto_v3_LOCAL_NONCEBYTES 32U
 #define paseto_v3_LOCAL_KEYBYTES 32U
+#define paseto_v3_LOCAL_NONCEBYTES 32U
 
 #define paseto_v3_PUBLIC_PUBLICKEYBYTES 49U
 #define paseto_v3_PUBLIC_SECRETKEYBYTES 48U
 
 
-#define paseto_v4_LOCAL_NONCEBYTES 32U
 #define paseto_v4_LOCAL_KEYBYTES 32U
+#define paseto_v4_LOCAL_NONCEBYTES 32U
 
 #define paseto_v4_PUBLIC_SEEDBYTES 32U
 #define paseto_v4_PUBLIC_PUBLICKEYBYTES 32U
