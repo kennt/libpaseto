@@ -1,6 +1,11 @@
 
+extern "C"
+{
 #include "paseto.h"
+#include "paserk.h"
 #include "helpers.h"
+};
+
 
 #include <filesystem>
 #include <fstream>
@@ -113,7 +118,7 @@ void run_test_vector(const string pathToFile,
                 paseto::BinaryVector ia_bytes;
                 if (KeyTypeVersion(local_encode_keytype) > 2)
                     ia_bytes = paseto::Binary::fromString(implicit_assertion);
-                bool encryption_test_ok = false;
+                bool test_ok = true;
 
                 auto seckey = paseto::Keys::createFromHex(
                         public_encode_keytype, ssecret_key);
@@ -127,33 +132,38 @@ void run_test_vector(const string pathToFile,
                 }
                 catch (exception &ex)
                 {
-                    // ignore for now
+                    test_ok = false;
                 }
-                encryption_test_ok = (stoken == result);
+                if (test_ok)
+                    test_ok = (!result.empty() && (stoken == result));
                 if (!result.empty())
-                    cout << "  result:" << encryption_test_ok;
+                    cout << "  result:" << test_ok;
                 else
                     cout << "  result:" << "null";
-                if (encryption_test_ok || expect_fail)
+                if (test_ok != expect_fail)
                     cout << " signing:pass";
                 else
                     cout << " signing:FAILED";
 
                 paseto::Token token;
+                test_ok = true;
                 try
                 {
                     token = pubkey->verify(stoken, ia_bytes);
                 }
                 catch (exception)
                 {
+                    test_ok = false;
                 }
 
+                if (test_ok)
+                    test_ok = (!token.payload().empty() && (payload_bytes == token.payload()));
                 if (!token.payload().empty())
                     cout << "  result:" << (token.payload() == payload_bytes);
                 else
                     cout << "  result:" << "null";
 
-                if ((!token.payload().empty() && payload_bytes == token.payload()) || expect_fail)
+                if (test_ok != expect_fail)
                     cout << " verify:pass";
                 else
                     cout << " verify:FAILED";
@@ -176,7 +186,7 @@ void run_test_vector(const string pathToFile,
                     paseto::BinaryVector ia_bytes;
                     if (KeyTypeVersion(local_encode_keytype) > 2)
                         ia_bytes = paseto::Binary::fromString(implicit_assertion);
-                    bool encryption_test_ok = false;
+                    bool test_ok = true;
 
                     if (!element["payload"].is_null())
                     {
@@ -190,6 +200,7 @@ void run_test_vector(const string pathToFile,
                     if (nonce.length() == 2 * getNonceLength(local_encode_keytype))
                     {
                         key->setNonce(nonce, payload_bytes);
+                        test_ok = true;
 
                         try
                         {
@@ -197,18 +208,19 @@ void run_test_vector(const string pathToFile,
                         }
                         catch (exception ex)
                         {
-                            // ignore
+                            test_ok = false;
                         }
 
                         key->clearNonce();
                     }
-                    encryption_test_ok = (stoken == result);
+                    if (test_ok)
+                        test_ok = (!result.empty() && (stoken == result));
                     if (!result.empty())
-                        cout << "  result:" << encryption_test_ok;
+                        cout << "  result:" << test_ok;
                     else
                         cout << "  result:" << "null";
 
-                    if (encryption_test_ok || expect_fail)
+                    if (test_ok != expect_fail)
                         cout << " encrypt:pass ";
                     else
                         cout << " encrypt:FAILED ";
@@ -222,7 +234,7 @@ void run_test_vector(const string pathToFile,
                     paseto::BinaryVector ia_bytes;
                     if (KeyTypeVersion(local_encode_keytype) > 2)
                         ia_bytes = paseto::Binary::fromString(implicit_assertion);
-                    bool decryption_test_ok = false;
+                    bool test_ok = true;
 
                     if (!element["payload"].is_null())
                     {
@@ -243,18 +255,21 @@ void run_test_vector(const string pathToFile,
                         }
                         catch (exception ex)
                         {
+                            test_ok = false;
                         }
                     }
                 
-                    decryption_test_ok = (token.payload() == payload_bytes);
-                    decryption_test_ok &= (token.footer() == footer_bytes);
-
+                    if (test_ok)
+                    {
+                        test_ok = (token.payload() == payload_bytes);
+                        test_ok = test_ok && (token.footer() == footer_bytes);
+                    }
                     if (!token.payload().empty())
-                        cout << " result:" << decryption_test_ok;
+                        cout << " result:" << test_ok;
                     else
                         cout << " result:" << "null";
 
-                    if ((!token.payload().empty() && payload_bytes == token.payload()) || expect_fail)
+                    if (test_ok != expect_fail)
                         cout << " decrypt:pass";
                     else
                         cout << " decrypt:FAILED";

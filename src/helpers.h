@@ -47,4 +47,33 @@ uint8_t * decode_input(
                   uint8_t **body, size_t *body_len,
                   uint8_t **footer, size_t *footer_len);
 
+
+/**
+ * Allocates and formats the string as a paserk key.
+ *
+ * Writes out [header][base64-data]
+ **/
+char *format_paserk_key(const char *header, size_t header_len,
+                        uint8_t * key, size_t key_len);
+
+/**
+ * Some helpful utilities for base64/hex/bin conversion
+ **/
+#define BIN_TO_BASE64_MAXLEN(len) sodium_base64_ENCODED_LEN(len, sodium_base64_VARIANT_URLSAFE_NO_PADDING)
+#define BASE64_TO_BIN_MAXLEN(b64_len) (b64_len / 4 * 3)
+
+void _dump_hex(const char * title, const uint8_t *buffer, size_t buffer_len);
+
+
+uint8_t * paserk_v2_seal_encrypt(size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *pubkey, size_t pubkey_len,
+    const uint8_t *keydata, size_t keydata_len);
+
+uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *seckey, size_t seckey_len,
+    const uint8_t *data, size_t data_len);
+
+
 #endif //LIBPASETO_HELPERS_H

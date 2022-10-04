@@ -117,6 +117,9 @@ test: ## Run all tests
 			echo ======== pasetojsontest ========; \
 			./pasetojsontest && \
 			echo; \
+			echo ======== paserkjsontest ========; \
+			./paserkjsontest && \
+			echo; \
 			echo ======== ctest ========; \
 			ctest" ;\
 	fi

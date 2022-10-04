@@ -1,4 +1,5 @@
 #include "paseto.h"
+#include "paserk.h"
 #include "helpers.h"
 #include <sodium.h>
 
@@ -192,9 +193,7 @@ uint8_t *paseto_v4_local_decrypt(
         return NULL;
     }
     size_t minimum_len = header_len
-            + sodium_base64_ENCODED_LEN(
-                paseto_v4_LOCAL_NONCEBYTES + mac_len,
-                sodium_base64_VARIANT_URLSAFE_NO_PADDING) - 1;
+            + BIN_TO_BASE64_MAXLEN(paseto_v4_LOCAL_NONCEBYTES + mac_len) - 1;
     if (strlen(encoded) < minimum_len)
     {
         errno = EINVAL;
@@ -354,4 +353,204 @@ uint8_t *paseto_v4_local_decrypt(
     *message_len = plaintext_len;
 
     return plaintext;
+}
+
+
+static const char paserk_local[] = "k4.local.";
+static const size_t paserk_local_len = sizeof(paserk_local) - 1;
+static const char paserk_lid[] = "k4.lid.";
+static const size_t paserk_lid_len = sizeof(paserk_lid) - 1;
+static const char paserk_seal[] = "k4.seal.";
+static const size_t paserk_seal_len = sizeof(paserk_seal) - 1;
+static const char paserk_local_wrap[] = "k4.local-wrap.pie.";
+static const size_t paserk_local_wrap_len = sizeof(paserk_local_wrap) - 1;
+static const char paserk_local_pw[] = "k4.local-pw.";
+static const size_t paserk_local_pw_len = sizeof(paserk_local_pw) - 1;
+
+
+char * paseto_v4_local_key_to_paserk(
+    uint8_t key[paseto_v4_LOCAL_KEYBYTES],
+    const char *paserk_id,
+    const uint8_t * secret, size_t secret_len,
+    struct v4PasswordParams *opts)
+{
+    if (!paserk_id)
+    {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    if (strncmp(paserk_id, paserk_local, paserk_local_len) == 0)
+    {
+        return format_paserk_key(paserk_local, paserk_local_len,
+                                 key, paseto_v4_LOCAL_KEYBYTES);
+    }
+    else if (strncmp(paserk_id, paserk_lid, paserk_lid_len) == 0)
+    {
+        char * paserk_key = paseto_v4_local_key_to_paserk(key, paserk_local, NULL, 0, NULL);
+        size_t to_encode_len = paserk_lid_len + strlen(paserk_key);
+        uint8_t * to_encode = (uint8_t *)malloc(to_encode_len + 1);
+        if (!to_encode) {
+            free(paserk_key);
+            errno = ENOMEM;
+            return NULL;
+        }
+        memcpy(to_encode, paserk_lid, paserk_lid_len);
+        memcpy(to_encode+paserk_lid_len, paserk_key, to_encode_len - paserk_lid_len);
+
+        uint8_t hash[33];
+        crypto_generichash(hash, sizeof(hash), to_encode, to_encode_len, NULL, 0);
+
+        free(to_encode);
+        free(paserk_key);
+
+        return format_paserk_key(paserk_lid, paserk_lid_len,
+                                 hash, sizeof(hash));
+    }
+    else if (strncmp(paserk_id, paserk_seal, paserk_seal_len) == 0)
+    {
+        size_t encoded_len = 0;
+        uint8_t * encoded = paserk_v2_seal_encrypt(&encoded_len,
+            paserk_seal, paserk_seal_len,
+            secret, secret_len,
+            key, paseto_v4_LOCAL_KEYBYTES);
+
+        char * output = format_paserk_key(paserk_seal, paserk_seal_len,
+                                          encoded, encoded_len);
+        free(encoded);
+        return output;
+    }
+    else if (strncmp(paserk_id, paserk_local_wrap, paserk_local_wrap_len) == 0)
+    {
+        size_t out_len;
+        uint8_t * out = paserk_v2_wrap(
+                    &out_len,
+                    paserk_local_wrap, paserk_local_wrap_len,
+                    secret, secret_len,
+                    key, paseto_v4_LOCAL_KEYBYTES);
+        char * output = format_paserk_key(paserk_local_wrap, paserk_local_wrap_len,
+                                out, out_len);
+        free(out);
+        return output;
+    }
+    else if (strncmp(paserk_id, paserk_local_pw, paserk_local_pw_len) == 0)
+    {
+    }
+    errno = EINVAL;
+    return NULL;
+}
+
+bool paseto_v4_local_key_from_paserk(
+    uint8_t key[paseto_v4_LOCAL_KEYBYTES],
+    const char * paserk_key, size_t paserk_key_len,
+    const uint8_t * secret, size_t secret_len)
+{
+    if (strncmp(paserk_key, paserk_local, paserk_local_len) == 0)
+    {
+        size_t len;
+        if (sodium_base642bin(
+                key, paseto_v4_LOCAL_KEYBYTES,
+                paserk_key + paserk_local_len, paserk_key_len - paserk_local_len,
+                NULL, &len, NULL,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING) == 0)
+        {
+            return true;
+        }
+    }
+    else if (strncmp(paserk_key, paserk_seal, paserk_seal_len) == 0)
+    {
+        // decode the base64 data
+        size_t paserk_data_len = BASE64_TO_BIN_MAXLEN(paserk_key_len);
+        uint8_t * paserk_data = (uint8_t *) malloc(paserk_data_len);
+        if (!paserk_data) {
+            errno = ENOMEM;
+            return false;
+        }
+        size_t len;
+        if (sodium_base642bin(
+                paserk_data, paserk_data_len,
+                paserk_key + paserk_seal_len, paserk_key_len - paserk_seal_len,
+                NULL, &len, NULL,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0)
+        {
+            free(paserk_data);
+            errno = EINVAL;
+            return false;
+        }
+
+        size_t output_len;
+        uint8_t * pdk = paserk_v2_seal_decrypt(&output_len,
+                        paserk_seal, paserk_seal_len,
+                        secret, secret_len,
+                        paserk_data, len);
+        if (!pdk) {
+            free(paserk_data);
+            errno = EINVAL;
+            return false;
+        }
+        free(paserk_data);
+
+        if (output_len != paseto_v4_LOCAL_KEYBYTES)
+        {
+            fprintf(stderr, "unexpected key length: actual:%zu expected:%u\n",
+                output_len, paseto_v4_LOCAL_KEYBYTES);
+            free(pdk);
+            errno = EINVAL;
+            return false;
+        }
+        memcpy(key, pdk, paseto_v4_LOCAL_KEYBYTES);
+
+        free(pdk);
+        return true;
+    }
+    else if (strncmp(paserk_key, paserk_local_wrap, paserk_local_wrap_len) == 0)
+    {
+        // decode the base64 data
+        size_t paserk_data_len = BASE64_TO_BIN_MAXLEN(paserk_key_len);
+        uint8_t * paserk_data = (uint8_t *) malloc(paserk_data_len);
+        if (!paserk_data) {
+            errno = ENOMEM;
+            return false;
+        }
+        size_t len;
+        if (sodium_base642bin(
+                paserk_data, paserk_data_len,
+                paserk_key + paserk_local_wrap_len, paserk_key_len - paserk_local_wrap_len,
+                NULL, &len, NULL,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0)
+        {
+            free(paserk_data);
+            return false;
+        }
+
+        size_t output_len;
+        uint8_t * pdk = paserk_v2_unwrap(
+                        &output_len,
+                        paserk_local_wrap, paserk_local_wrap_len,
+                        secret, secret_len,
+                        paserk_data, len);
+        if (!pdk) {
+            free(paserk_data);
+            return false;
+        }
+        free(paserk_data);
+
+        if (output_len != paseto_v4_LOCAL_KEYBYTES)
+        {
+            fprintf(stderr, "unexpected key length: actual:%zu expected:%u\n",
+                output_len, paseto_v4_LOCAL_KEYBYTES);
+            free(pdk);
+            errno = EINVAL;
+            return false;
+        }
+        memcpy(key, pdk, paseto_v4_LOCAL_KEYBYTES);
+
+        free(pdk);
+        return true;
+    }
+    else if (strncmp(paserk_key, paserk_local_pw, paserk_local_pw_len) == 0)
+    {
+    }
+    errno = EINVAL;
+    return false;
 }

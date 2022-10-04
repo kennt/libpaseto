@@ -1,5 +1,6 @@
 extern "C" {
 #include "paseto.h"
+#include "paserk.h"
 #include "helpers.h"
 #include <sodium.h>
 
@@ -8,27 +9,45 @@ extern "C" {
 };
 
 #include "cryptopp/cryptlib.h"
-#include "cryptopp/modes.h"
-using CryptoPP::CTR_Mode;
-
-#include "cryptopp/hkdf.h"
-using CryptoPP::HKDF;
-
-#include "cryptopp/sha.h"
-using CryptoPP::SHA384;
-
-#include "cryptopp/hex.h"
-using CryptoPP::HexEncoder;
-
-#include "cryptopp/hmac.h"
-using CryptoPP::HMAC;
 
 #include "cryptopp/aes.h"
 using CryptoPP::AES;
 
+#include "cryptopp/eccrypto.h"
+using CryptoPP::ECP;
+using CryptoPP::ECDH;
+
+#include "cryptopp/algebra.h"
+using CryptoPP::Integer;
+
 #include "cryptopp/filters.h"
 using CryptoPP::StringSink;
 using CryptoPP::StreamTransformationFilter;
+
+#include "cryptopp/hex.h"
+using CryptoPP::HexEncoder;
+
+#include "cryptopp/hkdf.h"
+using CryptoPP::HKDF;
+
+#include "cryptopp/hmac.h"
+using CryptoPP::HMAC;
+
+#include "cryptopp/modes.h"
+using CryptoPP::CTR_Mode;
+
+#include "cryptopp/oids.h"
+using CryptoPP::OID;
+
+#include "cryptopp/osrng.h"
+using CryptoPP::AutoSeededRandomPool;
+
+#include "secblock.h"
+using CryptoPP::SecByteBlock;
+
+#include "cryptopp/sha.h"
+using CryptoPP::SHA384;
+
 
 #include <iostream>
 using std::cout;
@@ -238,9 +257,7 @@ uint8_t *paseto_v3_local_decrypt(
     /* #3. Verify the header */
     {
         size_t minimum_len = header_len
-                + sodium_base64_ENCODED_LEN(
-                    paseto_v3_LOCAL_NONCEBYTES + mac_len,
-                    sodium_base64_VARIANT_URLSAFE_NO_PADDING) - 1;
+                + BIN_TO_BASE64_MAXLEN(paseto_v3_LOCAL_NONCEBYTES + mac_len) - 1;
         if (strlen(encoded) < minimum_len)
         {
             errno = EINVAL;
@@ -409,4 +426,231 @@ uint8_t *paseto_v3_local_decrypt(
     *message_len = plaintext_len;
 
     return plaintext;
+}
+
+static const char paserk_local[] = "k3.local.";
+static const size_t paserk_local_len = sizeof(paserk_local) - 1;
+static const char paserk_lid[] = "k3.lid.";
+static const size_t paserk_lid_len = sizeof(paserk_lid) - 1;
+static const char paserk_seal[] = "k3.seal.";
+static const size_t paserk_seal_len = sizeof(paserk_seal) - 1;
+static const char paserk_local_wrap[] = "k3.local-wrap.pie.";
+static const size_t paserk_local_wrap_len = sizeof(paserk_local_wrap) - 1;
+static const char paserk_local_pw[] = "k3.local-pw.";
+static const size_t paserk_local_pw_len = sizeof(paserk_local_pw) - 1;
+
+
+char * paseto_v3_local_key_to_paserk(
+    uint8_t key[paseto_v3_LOCAL_KEYBYTES],
+    const char *paserk_id,
+    const uint8_t * secret, size_t secret_len,
+    struct v3PasswordParams *opts)
+{
+    if (!paserk_id)
+    {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    if (strncmp(paserk_id, paserk_local, paserk_local_len) == 0)
+    {
+        return format_paserk_key(paserk_local, paserk_local_len,
+                                 key, paseto_v3_LOCAL_KEYBYTES);
+    }
+    else if (strncmp(paserk_id, paserk_lid, paserk_lid_len) == 0)
+    {
+        char * paserk_key = paseto_v3_local_key_to_paserk(key, paserk_local, NULL, 0, NULL);
+        size_t to_encode_len = paserk_lid_len + strlen(paserk_key);
+        uint8_t * to_encode = (uint8_t *)malloc(to_encode_len + 1);
+        if (!to_encode) {
+            free(paserk_key);
+            errno = ENOMEM;
+            return NULL;
+        }
+        memcpy(to_encode, paserk_lid, paserk_lid_len);
+        memcpy(to_encode+paserk_lid_len, paserk_key, to_encode_len - paserk_lid_len);
+
+        SHA384 sha;
+        uint8_t *digest = (uint8_t *) malloc(sha.DigestSize());
+        if (!digest) {
+            free(paserk_key);
+            errno = ENOMEM;
+            return NULL;
+        }
+        sha.Update(to_encode, to_encode_len);
+        sha.Final(digest);
+
+        // assert that sha.DigestSize() > 33
+        uint8_t hash[33];
+        memcpy(hash, digest, 33);
+
+        free(digest);
+        free(to_encode);
+        free(paserk_key);
+
+        return format_paserk_key(paserk_lid, paserk_lid_len,
+                                 hash, sizeof(hash));
+    }
+    else if (strncmp(paserk_id, paserk_seal, paserk_seal_len) == 0)
+    {
+        // #1. Generate random ephemeral P-384 keypair (esk, epk)
+        uint8_t esk[P384_SECRETKEYBYTES];
+        uint8_t epk[P384_COMPRESSED_PUBLICKEYBYTES];
+        uint8_t pk[P384_COMPRESSED_PUBLICKEYBYTES];
+
+        if (secret_len != P384_COMPRESSED_PUBLICKEYBYTES)
+        {
+            fprintf(stderr, "Unexpected public key length: actual:%zu expected:%d\n"
+                            "A compressed P-384 public key is expected.\n",
+                secret_len,
+                P384_COMPRESSED_PUBLICKEYBYTES);
+            errno = EINVAL;
+            return NULL;
+        }
+        memcpy(pk, secret, secret_len);
+
+        {
+            AutoSeededRandomPool rng;
+            ECDH<ECP>::Domain ecdh(CryptoPP::ASN1::secp384r1());
+            SecByteBlock priv(ecdh.PrivateKeyLength());
+            SecByteBlock pub(ecdh.PublicKeyLength());
+
+            // Public/private key lengths are 48-bytes (due to 384-bit algorithm)
+            if (ecdh.PrivateKeyLength() != P384_SECRETKEYBYTES)
+            {
+                fprintf(stderr, "Unexpected private key length: actual:%u expected:%d\n",
+                    ecdh.PrivateKeyLength(), P384_SECRETKEYBYTES);
+                errno = EINVAL;
+                return NULL;
+            }
+            // The public key is a combination of privatekey + publickey + header-byte
+            if (ecdh.PublicKeyLength() != (P384_SECRETKEYBYTES + P384_COMPRESSED_PUBLICKEYBYTES))
+            {
+                fprintf(stderr, "Unexpected ECDH public key length: actual:%u expected:%d\n",
+                    ecdh.PublicKeyLength(),
+                    (P384_SECRETKEYBYTES + P384_COMPRESSED_PUBLICKEYBYTES));
+                errno = EINVAL;
+                return NULL;
+            }
+
+            // priv is the private key exponent (which is what we want)
+            ecdh.GenerateKeyPair(rng, priv, pub);
+            memcpy(esk, priv.BytePtr(), priv.SizeInBytes());
+
+            // pub is the x,y coords (should start with 04)
+            Integer y(pub.BytePtr() + P384_COMPRESSED_PUBLICKEYBYTES, P384_PUBLICKEYBYTES);
+            epk[0] = (y.GetBit(0) ? 0x03 : 0x02);
+            memcpy(epk + 1, pub.BytePtr() + 1, P384_PUBLICKEYBYTES);
+        }
+
+        // #2. Calculate shared secret xk
+        uint8_t xk[crypto_scalarmult_BYTES];
+        crypto_scalarmult(xk, esk, pk);
+
+        // #3. Calculate encryption key Ek and nonce
+        // #4. Calculate the auth key (Ak)
+        uint8_t Ek[32];
+        uint8_t nonce[16];
+        uint8_t Ak[48];
+        uint8_t buffer[1 + paserk_seal_len + sizeof(xk) + sizeof(epk) + sizeof(pk)];
+
+        {
+            buffer[0] = 0x01;
+            memcpy(buffer + 1, paserk_seal, paserk_seal_len);
+            memcpy(buffer + 1 + paserk_seal_len, xk, sizeof(xk));
+            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk), epk, sizeof(epk));
+            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + sizeof(epk), pk, sizeof(pk));
+
+            uint8_t digest[48];
+            SHA384 sha;
+            sha.CalculateDigest(digest, buffer, sizeof(buffer));
+
+            memcpy(Ek, digest, sizeof(Ek));
+            memcpy(nonce, digest + sizeof(Ek), sizeof(nonce));
+
+            buffer[0] = 0x02;
+            sha.Restart();
+            sha.CalculateDigest(Ak, buffer, sizeof(buffer));
+        }
+
+        // #5. Encrypt plaintext datakey (pdk)
+        uint8_t edk[paseto_v3_LOCAL_KEYBYTES];
+
+        {
+            CTR_Mode< AES >::Encryption encryption;
+            encryption.SetKeyWithIV(Ek, sizeof(Ek), nonce);
+            StreamTransformationFilter encryptor(encryption, NULL);
+            encryptor.Put(key, paseto_v3_LOCAL_KEYBYTES);
+            encryptor.MessageEnd();
+
+            if (encryptor.MaxRetrievable() != paseto_v3_LOCAL_KEYBYTES)
+            {
+                fprintf(stderr, "ciphertext length is not the same as plaintext length");
+                errno = EINVAL;
+                return NULL;
+            }
+            encryptor.Get(edk, sizeof(edk));
+        }
+
+        // #6. Calculate auth tag (tag)
+        uint8_t tag[48];
+
+        {
+            uint8_t message[paserk_seal_len + sizeof(epk) + sizeof(edk)];
+            memcpy(message, paserk_seal, paserk_seal_len);
+            memcpy(message + paserk_seal_len, epk, sizeof(epk));
+            memcpy(message + paserk_seal_len + sizeof(epk), edk, sizeof(edk));
+            HMAC<SHA384> hmac(Ak, sizeof(Ak));
+            hmac.Update(message, sizeof(message));
+            hmac.Final(tag);
+        }
+
+        // #7. Return h || base64(tag || epk || edk)
+        uint8_t output[sizeof(tag) + sizeof(epk) + sizeof(edk)];
+        memcpy(output, tag, sizeof(tag));
+        memcpy(output + sizeof(tag), epk, sizeof(epk));
+        memcpy(output + sizeof(tag) + sizeof(epk), edk, sizeof(edk));
+
+        return format_paserk_key(paserk_seal, paserk_seal_len,
+                                 output, sizeof(output));
+    }
+    else if (strncmp(paserk_id, paserk_local_wrap, paserk_local_wrap_len) == 0)
+    {
+    }
+    else if (strncmp(paserk_id, paserk_local_pw, paserk_local_pw_len) == 0)
+    {
+    }
+    errno = EINVAL;
+    return NULL;
+}
+
+
+bool paseto_v3_local_key_from_paserk(
+    uint8_t key[paseto_v3_LOCAL_KEYBYTES],
+    const char * paserk_key, size_t paserk_key_len,
+    const uint8_t * secret, size_t secret_len)
+{
+    if (strncmp(paserk_key, paserk_local, paserk_local_len) == 0)
+    {
+        size_t len;
+        if (sodium_base642bin(
+                key, paseto_v3_LOCAL_KEYBYTES,
+                paserk_key + paserk_local_len, paserk_key_len - paserk_local_len,
+                NULL, &len, NULL,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING) == 0)
+        {
+            return true;
+        }
+    }
+    else if (strncmp(paserk_key, paserk_seal, paserk_seal_len) == 0)
+    {
+    }
+    else if (strncmp(paserk_key, paserk_local_wrap, paserk_local_wrap_len) == 0)
+    {
+    }
+    else if (strncmp(paserk_key, paserk_local_pw, paserk_local_pw_len) == 0)
+    {
+    }
+    errno = EINVAL;
+    return false;
 }

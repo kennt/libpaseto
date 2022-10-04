@@ -201,3 +201,39 @@ uint8_t * decode_input(
         *footer_len = decoded_footer_len;
     return decoded;
 }
+
+char * format_paserk_key(const char *header, size_t header_len,
+                         uint8_t * to_encode, size_t to_encode_len)
+{
+    if (to_encode == NULL || to_encode_len == 0)
+    {
+        return NULL;
+    }
+    // BIN_TO_BASE64_MAXLEN includes a trailing NULL
+    size_t paserk_len = header_len + BIN_TO_BASE64_MAXLEN(to_encode_len);
+    char *output = malloc(paserk_len);
+    if (!output) {
+        errno = ENOMEM;
+        return NULL;
+    }
+    char * output_current = output;
+    size_t len_remaining = paserk_len;
+    memcpy(output_current, header, header_len);
+
+    output_current += header_len;
+    len_remaining -= header_len;
+
+    sodium_bin2base64(
+            output_current, len_remaining,
+            to_encode, to_encode_len,
+            sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+    return output;
+}
+
+void _dump_hex(const char * title, const uint8_t *buffer, size_t buffer_len)
+{
+    fprintf(stdout, "%s (%zu) : ", title, buffer_len);
+    for (size_t i=0; i<buffer_len; i++)
+        fprintf(stdout, "%02x", buffer[i]);
+    fprintf(stdout, "\n");
+}

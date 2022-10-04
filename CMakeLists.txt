@@ -104,6 +104,7 @@ install(TARGETS paseto
 install(FILES
 	include/paseto.h
 	include/paseto.hpp
+	include/paserk.h
 	DESTINATION include)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/paseto.pc"
 	DESTINATION lib/pkgconfig)
@@ -165,6 +166,69 @@ add_custom_command(TARGET pasetojsontest POST_BUILD
 	${CMAKE_CURRENT_SOURCE_DIR}/test/v4.json
 	$<TARGET_FILE_DIR:pasetotest>/test)
 
+add_executable(paserkjsontest
+	test/helpers.h
+	test/helpers.c
+	test/paserkjsontest.cpp)
+target_compile_definitions(paserkjsontest PRIVATE)
+target_link_libraries(paserkjsontest
+	PUBLIC
+	paseto
+	${SODIUM_LIBRARIES}
+	cryptopp::cryptopp
+	fmt::fmt-header-only
+	nlohmann_json::nlohmann_json)
+add_custom_command(TARGET paserkjsontest POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E make_directory
+	$<TARGET_FILE_DIR:pasetotest>/test/paserk
+	COMMAND ${CMAKE_COMMAND} -E copy
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.lid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.local-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.local-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.local.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.pid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.public.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.seal.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.secret-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.secret-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.secret.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.sid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.lid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.local-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.local-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.local.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.pid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.public.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.seal.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.secret-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.secret-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.secret.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.sid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.lid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.local-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.local-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.local.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.pid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.public.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.seal.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.secret-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.secret-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.secret.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.sid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.lid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.local-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.local-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.local.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.pid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.public.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.seal.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.secret-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.secret-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.secret.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.sid.json
+	$<TARGET_FILE_DIR:pasetotest>/test/paserk)
+
+
 include(CTest)
 include(Catch)
 catch_discover_tests(pasetocpptests)
@@ -180,7 +244,7 @@ foreach(EXAMPLE ${EXAMPLES})
 endforeach()
 
 
-set(CPPEXAMPLES cppexample)
+set(CPPEXAMPLES cppexample cppexample2)
 foreach(CPPEXAMPLE ${CPPEXAMPLES})
 	add_executable(${CPPEXAMPLE} examples/${CPPEXAMPLE}.cpp)
 	target_link_libraries(${CPPEXAMPLE}
