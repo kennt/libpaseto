@@ -268,15 +268,6 @@ uint8_t *paseto_v2_local_decrypt(
     return message;
 }
 
-#if 0
-static void dumpHex(const char *title, const uint8_t * data, size_t data_len)
-{
-    fprintf(stdout, "%s", title);
-    for (size_t i=0; i<data_len; i++)
-        fprintf(stdout, "%02x", data[i]);
-    fprintf(stdout, "\n");
-}
-#endif
 
 static const char paserk_local[] = "k2.local.";
 static const size_t paserk_local_len = sizeof(paserk_local) - 1;

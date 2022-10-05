@@ -192,6 +192,19 @@ bool paseto_v3_secret_key_from_paserk(
     const char * paserk_key, size_t paserk_key_len,
     const uint8_t * secret, size_t secret_len);
 
+uint8_t * paserk_v3_wrap(
+    size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *pubkey, size_t pubkey_len,
+    const uint8_t *data, size_t data_len);
+
+uint8_t * paserk_v3_unwrap(
+    size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *wrapkey, size_t wrapkey_len,
+    const uint8_t *data, size_t data_len);
+
+
 
 char * paseto_v4_local_key_to_paserk(
     uint8_t key[paseto_v4_LOCAL_KEYBYTES],

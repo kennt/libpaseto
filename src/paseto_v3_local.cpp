@@ -48,6 +48,8 @@ using CryptoPP::SecByteBlock;
 #include "cryptopp/sha.h"
 using CryptoPP::SHA384;
 
+#include "helpers.hpp"
+
 
 #include <iostream>
 using std::cout;
@@ -83,15 +85,6 @@ void default_v3_generate_nonce(
     randombytes_buf(nonce, paseto_v3_LOCAL_NONCEBYTES);
 }
 
-
-void dumpHex(const char *title, const uint8_t* p, size_t len)
-{
-    std::string result;
-    HexEncoder encoder(new StringSink(result));
-    encoder.Put(p, len);
-    encoder.MessageEnd();
-    std::cout << title << result << std::endl;
-}
 
 char *paseto_v3_local_encrypt(
         const uint8_t *message, size_t message_len,
@@ -440,6 +433,219 @@ static const char paserk_local_pw[] = "k3.local-pw.";
 static const size_t paserk_local_pw_len = sizeof(paserk_local_pw) - 1;
 
 
+uint8_t * paserk_v3_wrap(
+    size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *wrapkey, size_t wrapkey_len,
+    const uint8_t *data, size_t data_len)
+{
+    // #1. Enforce algorithm lucidity
+    // #2. Generate a randam nonce
+    uint8_t nonce[32];
+    randombytes_buf(nonce, sizeof(nonce));
+
+    // #3. Derive encryption key (Ek) and nonce2
+    uint8_t Ek[32];
+    uint8_t nonce2[16];
+    {
+        uint8_t digest[HMAC<SHA384>::DIGESTSIZE];
+        uint8_t to_hash[1 + sizeof(nonce)];
+        to_hash[0] = 0x80;
+        memcpy(to_hash+1, nonce, sizeof(nonce));
+
+        HMAC<SHA384> hmac(wrapkey, wrapkey_len);
+        hmac.Update(to_hash, sizeof(to_hash));
+        hmac.Final(digest);
+
+        memcpy(Ek, digest, sizeof(Ek));
+        memcpy(nonce2, digest+sizeof(Ek), sizeof(nonce2));
+    }
+
+    // #4. Derive authentication key (Ak)
+    uint8_t Ak[32];
+    {
+        uint8_t digest[HMAC<SHA384>::DIGESTSIZE];
+        uint8_t to_hash[1 + sizeof(nonce)];
+        to_hash[0] = 0x81;
+        memcpy(to_hash+1, nonce, sizeof(nonce));
+        HMAC<SHA384> hmac(wrapkey, wrapkey_len);
+        hmac.Update(to_hash, sizeof(to_hash));
+        hmac.Final(digest);
+
+        memcpy(Ak, digest, sizeof(Ak));
+    }
+
+    // #5. Encrypt plaintext key (data) as ciphertext
+    size_t ciphertext_len = data_len;
+    uint8_t * ciphertext = (uint8_t *) malloc(ciphertext_len);
+    if (!ciphertext)
+    {
+        errno = ENOMEM;
+        return NULL;
+    }
+
+    {
+        CTR_Mode< AES >::Encryption encryption;
+        encryption.SetKeyWithIV(Ek, sizeof(Ek), nonce2);
+        StreamTransformationFilter encryptor(encryption, NULL);
+        encryptor.Put(data, data_len);
+        encryptor.MessageEnd();
+
+        if (encryptor.MaxRetrievable() != data_len)
+        {
+            fprintf(stderr, "wrap: ciphertext length(%zu) is not the same as plaintext length (%zu)",
+                encryptor.MaxRetrievable(), data_len);
+            free(ciphertext);
+            errno = EINVAL;
+            return NULL;
+        }
+        encryptor.Get(ciphertext, ciphertext_len);
+    }
+
+    // #6. Calculate authentication tag (tag)
+    uint8_t tag[48];
+    {
+        uint8_t to_hash[header_len + sizeof(nonce) + ciphertext_len];
+        memcpy(to_hash, header, header_len);
+        memcpy(to_hash + header_len, nonce, sizeof(nonce));
+        memcpy(to_hash + header_len + sizeof(nonce), ciphertext, ciphertext_len);
+        HMAC<SHA384> hmac(Ak, sizeof(Ak));
+        hmac.Update(to_hash, sizeof(to_hash));
+        hmac.Final(tag);
+    }
+
+    // #7. Return tag || nonce || ciphertext
+    size_t out_len = sizeof(tag) + sizeof(nonce) + ciphertext_len;
+    uint8_t * out = (uint8_t *) malloc(out_len);
+    if (!out) {
+        free(ciphertext);
+        errno = ENOMEM;
+        return NULL;
+    }
+    memcpy(out, tag, sizeof(tag));
+    memcpy(out + sizeof(tag), nonce, sizeof(nonce));
+    memcpy(out + sizeof(tag) + sizeof(nonce), ciphertext, ciphertext_len);
+
+    free(ciphertext);
+    if (output_len)
+        *output_len = out_len;
+    return out;
+}
+
+uint8_t * paserk_v3_unwrap(
+    size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *wrapkey, size_t wrapkey_len,
+    const uint8_t *data, size_t data_len)
+{
+    // #1. Decode base64, break apart into tag, nonce, and cipherkey
+    uint8_t tag[48];
+    uint8_t nonce[32];
+
+    size_t ciphertext_len = data_len - sizeof(tag) - sizeof(nonce);
+    uint8_t * ciphertext = (uint8_t *) malloc(ciphertext_len);
+    if (!ciphertext) {
+        errno = ENOMEM;
+        return NULL;
+    }
+    memcpy(tag, data, sizeof(tag));
+    memcpy(nonce, data+sizeof(tag), sizeof(nonce));
+    memcpy(ciphertext, data + sizeof(tag) + sizeof(nonce), ciphertext_len);
+
+    // #2. Derive auth key
+    uint8_t Ak[32];
+    {
+        uint8_t digest[HMAC<SHA384>::DIGESTSIZE];
+        uint8_t to_hash[1 + sizeof(nonce)];
+        to_hash[0] = 0x81;
+        memcpy(to_hash+1, nonce, sizeof(nonce));
+
+        HMAC<SHA384> hmac(wrapkey, wrapkey_len);
+        hmac.Update(to_hash, sizeof(to_hash));
+        hmac.Final(digest);
+
+        memcpy(Ak, digest, sizeof(Ak));
+    }
+
+    // #3. Recalculate auth tag
+    uint8_t tag2[HMAC<SHA384>::DIGESTSIZE];
+    {
+        uint8_t to_hash[header_len + sizeof(nonce) + ciphertext_len];
+        memcpy(to_hash, header, header_len);
+        memcpy(to_hash + header_len, nonce, sizeof(nonce));
+        memcpy(to_hash + header_len + sizeof(nonce), ciphertext, ciphertext_len);
+
+        HMAC<SHA384> hmac(Ak, sizeof(Ak));
+        hmac.Update(to_hash, sizeof(to_hash));
+        hmac.Final(tag2);
+    }
+
+    // #4. Compare tags
+    if (sodium_memcmp(tag, tag2, sizeof(tag)) != 0)
+    {
+        free(ciphertext);
+        errno = EINVAL;
+        return NULL;
+    }
+
+    // #5. Derive encryption key and nonce3
+    uint8_t Ek[32];
+    uint8_t nonce2[16];
+    {
+        uint8_t digest[HMAC<SHA384>::DIGESTSIZE];
+        uint8_t to_hash[1 + sizeof(nonce)];
+        to_hash[0] = 0x80;
+        memcpy(to_hash+1, nonce, sizeof(nonce));
+        HMAC<SHA384> hmac(wrapkey, wrapkey_len);
+        hmac.Update(to_hash, sizeof(to_hash));
+        hmac.Final(digest);
+
+        memcpy(Ek, digest, sizeof(Ek));
+        memcpy(nonce2, digest+sizeof(Ek), sizeof(nonce2));
+    }
+
+    // #6. Decrypt cipherkey
+    size_t plaintext_len;
+    uint8_t * plaintext;
+    {
+        CTR_Mode< AES >::Decryption decryption;
+        decryption.SetKeyWithIV(Ek, sizeof(Ek), nonce2);
+        StreamTransformationFilter decryptor(decryption, NULL);
+        decryptor.Put(ciphertext, ciphertext_len);
+        decryptor.MessageEnd();
+
+        plaintext_len = decryptor.MaxRetrievable();
+        if (plaintext_len != ciphertext_len)
+        {
+            fprintf(stderr, "ciphertext length is not the same as plaintext length");
+            free(ciphertext);
+            errno = EINVAL;
+            return NULL;
+        }
+        plaintext = (uint8_t *) malloc(plaintext_len+1);
+        if (plaintext == NULL)
+        {
+            free(ciphertext);
+            errno = ENOMEM;
+            return NULL;
+        }
+        decryptor.Get(plaintext, plaintext_len);
+
+        // include a null terminator for convenience
+        plaintext[plaintext_len] = '\0';
+    }
+
+    free(ciphertext);
+
+    // #7. Algorithm lucidity
+    // #8. Return plaintext
+    if (output_len)
+        *output_len = plaintext_len;
+    return plaintext;
+}
+
+
+
 char * paseto_v3_local_key_to_paserk(
     uint8_t key[paseto_v3_LOCAL_KEYBYTES],
     const char *paserk_id,
@@ -616,6 +822,20 @@ char * paseto_v3_local_key_to_paserk(
     }
     else if (strncmp(paserk_id, paserk_local_wrap, paserk_local_wrap_len) == 0)
     {
+        size_t out_len;
+        uint8_t * out = paserk_v3_wrap(
+                &out_len,
+                paserk_local_wrap, paserk_local_wrap_len,
+                secret, secret_len,
+                key, paseto_v3_LOCAL_KEYBYTES);
+        if (!out) {
+            errno = ENOMEM;
+            return NULL;
+        }
+        char * result = format_paserk_key(paserk_local_wrap, paserk_local_wrap_len,
+                                 out, out_len);
+        paseto_free(out);
+        return result;
     }
     else if (strncmp(paserk_id, paserk_local_pw, paserk_local_pw_len) == 0)
     {
@@ -644,9 +864,206 @@ bool paseto_v3_local_key_from_paserk(
     }
     else if (strncmp(paserk_key, paserk_seal, paserk_seal_len) == 0)
     {
+        if (secret_len != P384_SECRETKEYBYTES)
+        {
+            fprintf(stderr, "Unexpected secret key length: actual:%zu expected:%d\n"
+                            "A P-384 secret key is expected.\n",
+                secret_len,
+                P384_SECRETKEYBYTES);
+            errno = EINVAL;
+            return false;
+        }
+
+        // decode the base64 data
+        size_t paserk_data_len = BASE64_TO_BIN_MAXLEN(paserk_key_len);
+        uint8_t * paserk_data = (uint8_t *) malloc(paserk_data_len);
+        if (!paserk_data) {
+            errno = ENOMEM;
+            return false;
+        }
+        if (sodium_base642bin(
+                paserk_data, paserk_data_len,
+                paserk_key + paserk_seal_len, paserk_key_len - paserk_seal_len,
+                NULL, &paserk_data_len, NULL,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0)
+        {
+            free(paserk_data);
+            return false;
+        }
+
+        // #1. Verify header and sk
+        // TODO: check the sk len
+        const uint8_t * sk = secret;
+        size_t tag_len = 48;
+        size_t epk_len = P384_COMPRESSED_PUBLICKEYBYTES;
+        size_t edk_len = paserk_data_len - epk_len - tag_len;
+        uint8_t * tag = paserk_data;
+        uint8_t * epk = paserk_data + tag_len;
+        uint8_t * edk = paserk_data + tag_len + epk_len;
+
+        if (edk_len != paseto_v3_LOCAL_KEYBYTES)
+        {
+            free(paserk_data);
+            errno = EINVAL;
+            return false;
+        }
+
+        uint8_t pk[P384_COMPRESSED_PUBLICKEYBYTES];
+
+        // Derive the pk from the sk
+        {
+            ECDSA_RFC6979<ECP,SHA384>::PrivateKey secret_key;
+            ECDSA_RFC6979<ECP,SHA384>::PublicKey public_key;
+            AutoSeededRandomPool prng;
+
+            /* Initialize the sk */
+            Integer x {sk, P384_SECRETKEYBYTES};
+            secret_key.Initialize(CryptoPP::ASN1::secp384r1(), x);
+
+            if (!secret_key.Validate(prng, 3))
+            {
+                fprintf(stderr, "secret key validate() failed (%d)\n", __LINE__);
+                free(paserk_data);
+                errno = EINVAL;
+                return false;
+            }
+
+            /* get the pk from the sk */
+            secret_key.MakePublicKey(public_key);
+
+            /* save as point-compressed */
+            std::string pubkey_hex;
+            pubkey_hex = p384_publickey_to_hex(public_key);
+            key_load_hex(pk, sizeof(pk), pubkey_hex.c_str());
+        }
+
+        // #2. Calculate shared secret xk
+        uint8_t xk[crypto_scalarmult_BYTES];
+        crypto_scalarmult(xk, sk, epk);
+
+        // #3. Calculate the authentication key (Ak)
+        uint8_t Ak[48];
+        uint8_t buffer[1 + paserk_seal_len + sizeof(xk) + epk_len + sizeof(pk)];
+
+        {
+            buffer[0] = 0x02;
+            memcpy(buffer + 1, paserk_seal, paserk_seal_len);
+            memcpy(buffer + 1 + paserk_seal_len, xk, sizeof(xk));
+            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk), epk, epk_len);
+            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + epk_len, pk, sizeof(pk));
+
+            SHA384 sha;
+            sha.CalculateDigest(Ak, buffer, sizeof(buffer));
+        }
+
+        // #4. Recalc the auth tag
+        uint8_t tag2[48];
+        {
+            uint8_t message[paserk_seal_len + epk_len + edk_len];
+            memcpy(message, paserk_seal, paserk_seal_len);
+            memcpy(message + paserk_seal_len, epk, epk_len);
+            memcpy(message + paserk_seal_len + epk_len, edk, edk_len);
+            HMAC<SHA384> hmac(Ak, sizeof(Ak));
+            hmac.Update(message, sizeof(message));
+            hmac.Final(tag2);
+        }
+
+        // #5. Compare tags
+        if (sodium_memcmp(tag, tag2, sizeof(tag2)) != 0)
+        {
+            free(paserk_data);
+            errno = EINVAL;
+            return false;
+        }
+
+        // #6. Calculate the encryption key (Ek)
+        uint8_t Ek[32];
+        uint8_t nonce[16];
+        {
+            uint8_t digest[48];
+            buffer[0] = 0x01;
+            memcpy(buffer + 1, paserk_seal, paserk_seal_len);
+            memcpy(buffer + 1 + paserk_seal_len, xk, sizeof(xk));
+            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk), epk, epk_len);
+            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + epk_len, pk, sizeof(pk));
+
+            SHA384 sha;
+            sha.CalculateDigest(Ak, digest, sizeof(digest));
+
+            memcpy(Ek, digest, sizeof(Ek));
+            memcpy(nonce, digest + sizeof(Ek), sizeof(nonce));
+        }
+
+        // #7. Decrypt
+        uint8_t pdk[paseto_v3_LOCAL_KEYBYTES + 1];
+        size_t pdk_len = sizeof(pdk) - 1;
+        {
+            CTR_Mode< AES >::Decryption decryption;
+            decryption.SetKeyWithIV(Ek, sizeof(Ek), nonce);
+            StreamTransformationFilter decryptor(decryption, NULL);
+            decryptor.Put(edk, edk_len);
+            decryptor.MessageEnd();
+
+            size_t plaintext_len = decryptor.MaxRetrievable();
+            if (plaintext_len != paseto_v3_LOCAL_KEYBYTES)
+            {
+                fprintf(stderr, "unexpected key length: actual:%zu expected:%u\n",
+                    plaintext_len, paseto_v3_LOCAL_KEYBYTES);
+                free(paserk_data);
+                errno = EINVAL;
+                return false;
+            }
+            decryptor.Get(pdk, pdk_len);
+            pdk[pdk_len] = '\0';
+        }
+
+        // #8. Return the plaintext
+        free(paserk_data);
+        memcpy(key, pdk, sizeof(pdk));
+        return true;
     }
     else if (strncmp(paserk_key, paserk_local_wrap, paserk_local_wrap_len) == 0)
     {
+        // decode the base64 data
+        size_t paserk_data_len = BASE64_TO_BIN_MAXLEN(paserk_key_len);
+        uint8_t * paserk_data = (uint8_t *) malloc(paserk_data_len);
+        if (!paserk_data) {
+            errno = ENOMEM;
+            return false;
+        }
+        if (sodium_base642bin(
+                paserk_data, paserk_data_len,
+                paserk_key + paserk_local_wrap_len, paserk_key_len - paserk_local_wrap_len,
+                NULL, &paserk_data_len, NULL,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0)
+        {
+            free(paserk_data);
+            return false;
+        }
+
+        size_t output_len;
+        uint8_t * result = paserk_v3_unwrap(
+            &output_len,
+            paserk_local_wrap, paserk_local_wrap_len,
+            secret, secret_len,
+            paserk_data, paserk_data_len);
+        if (!result) {
+            free(paserk_data);
+            return false;
+        }
+        if (output_len != paseto_v3_LOCAL_KEYBYTES)
+        {
+            fprintf(stderr, "expecing a private key:  actual:%zu  expected:%d\n",
+                output_len, paseto_v3_LOCAL_KEYBYTES);
+            free(result);
+            free(paserk_data);
+            errno = EINVAL;
+            return false;
+        }
+        memcpy(key, result, output_len);
+        free(result);
+        free(paserk_data);
+        return true;
     }
     else if (strncmp(paserk_key, paserk_local_pw, paserk_local_pw_len) == 0)
     {

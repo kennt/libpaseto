@@ -270,7 +270,6 @@ void run_local_wrap_pie_test_vector(json &j, std::string version, const std::str
             // (but will also test sealing/unsealing ourselves)
 
             cout << name << " " << "expect-fail:" << expect_fail;
-
             if (!expect_fail)
             {
                 test_ok = true;
@@ -298,7 +297,6 @@ void run_local_wrap_pie_test_vector(json &j, std::string version, const std::str
                     cout << "  self-test:FAILED";
                 }
             }
-
             std::string actual;
 
             {

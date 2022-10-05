@@ -88,6 +88,8 @@ set(PASETO_SOURCES
 	src/paseto.c
 	src/helpers.c
 	src/helpers.h
+	src/helpers.cpp
+	src/helpers.hpp
 	include/paseto.h)
 
 configure_file("paseto.pc.in" "paseto.pc" @ONLY)

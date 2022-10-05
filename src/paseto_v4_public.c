@@ -383,6 +383,16 @@ char * paseto_v4_secret_key_to_paserk(
     }
     else if (strncmp(paserk_id, paserk_secret_wrap, paserk_secret_wrap_len) == 0)
     {
+        size_t out_len;
+        uint8_t * out = paserk_v2_wrap(
+                    &out_len,
+                    paserk_secret_wrap, paserk_secret_wrap_len,
+                    secret, secret_len,
+                    key, paseto_v4_PUBLIC_SECRETKEYBYTES);
+        char * output = format_paserk_key(paserk_secret_wrap, paserk_secret_wrap_len,
+                                out, out_len);
+        free(out);
+        return output;
     }
     else if (strncmp(paserk_id, paserk_secret_pw, paserk_secret_pw_len) == 0)
     {
@@ -410,6 +420,48 @@ bool paseto_v4_secret_key_from_paserk(
     }
     else if (strncmp(paserk_key, paserk_secret_wrap, paserk_secret_wrap_len) == 0)
     {
+        // decode the base64 data
+        size_t paserk_data_len = BASE64_TO_BIN_MAXLEN(paserk_key_len);
+        uint8_t * paserk_data = (uint8_t *) malloc(paserk_data_len);
+        if (!paserk_data) {
+            errno = ENOMEM;
+            return false;
+        }
+        size_t len;
+        if (sodium_base642bin(
+                paserk_data, paserk_data_len,
+                paserk_key + paserk_secret_wrap_len, paserk_key_len - paserk_secret_wrap_len,
+                NULL, &len, NULL,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0)
+        {
+            free(paserk_data);
+            return false;
+        }
+
+        size_t output_len;
+        uint8_t * pdk = paserk_v2_unwrap(
+                        &output_len,
+                        paserk_secret_wrap, paserk_secret_wrap_len,
+                        secret, secret_len,
+                        paserk_data, len);
+        if (!pdk) {
+            free(paserk_data);
+            return false;
+        }
+        free(paserk_data);
+
+        if (output_len != paseto_v4_PUBLIC_SECRETKEYBYTES)
+        {
+            fprintf(stderr, "unexpected key length: actual:%zu expected:%u\n",
+                output_len, paseto_v4_PUBLIC_SECRETKEYBYTES);
+            free(pdk);
+            errno = EINVAL;
+            return false;
+        }
+        memcpy(key, pdk, paseto_v4_PUBLIC_SECRETKEYBYTES);
+
+        free(pdk);
+        return true;
     }
     else if (strncmp(paserk_key, paserk_secret_pw, paserk_secret_pw_len) == 0)
     {

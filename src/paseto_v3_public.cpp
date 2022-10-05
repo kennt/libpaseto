@@ -36,6 +36,9 @@ using CryptoPP::AutoSeededRandomPool;
 #include "cryptopp/sha.h"
 using CryptoPP::SHA384;
 
+#include "helpers.hpp"
+
+
 static const uint8_t header[] = "v3.public.";
 static const size_t header_len = sizeof(header) - 1;
 static const size_t signature_len = 96;
@@ -67,17 +70,6 @@ bool paseto_v3_public_load_secret_key_base64(
     return key_load_base64(key, paseto_v3_PUBLIC_SECRETKEYBYTES, key_base64);
 }
 
-extern "C"
-void dumpHex(const char *title, int lineno, const uint8_t * data, size_t data_len)
-{
-    std::string data_hex;
-
-    data_hex.resize(2*data_len+1);
-    sodium_bin2hex(data_hex.data(), data_hex.length(),
-        data, data_len);
-
-    cout << title << " (" << lineno << ") : " << std::hex << data_hex << std::dec << endl;
-}
 
 bool paseto_v3_public_generate_keys(
         const uint8_t *seed, size_t seed_len,
@@ -94,44 +86,16 @@ bool paseto_v3_public_generate_keys(
     ECDSA_RFC6979<ECP,SHA384>::PrivateKey seckey;
     ECDSA_RFC6979<ECP,SHA384>::PublicKey pubkey;
     AutoSeededRandomPool prng;
-    std::stringstream ostream;
     std::string pubkey_hex;
     std::string seckey_hex;
 
-    seckey_hex.reserve(2*paseto_v3_PUBLIC_SECRETKEYBYTES + 1);
-    pubkey_hex.reserve(2*paseto_v3_PUBLIC_PUBLICKEYBYTES + 1);
-
     /* generate the secret key */
     seckey.Initialize( prng, CryptoPP::ASN1::secp384r1() );
-
-    ostream << std::hex << std::noshowbase << seckey.GetPrivateExponent();
-    seckey_hex.append(ostream.str());
-    seckey_hex.resize(seckey_hex.length()-1);   // remove 'h' at the end
-    std::stringstream().swap(ostream);
-
-    /* ensure that we are zero-filled on the left */
-    ostream.width(2*paseto_v3_PUBLIC_SECRETKEYBYTES);
-    ostream.fill('0');
-    ostream << seckey_hex;
-    seckey_hex = ostream.str();
-    std::stringstream().swap(ostream);
+    seckey_hex = p384_privatekey_to_hex(seckey);
 
     /* generate the public key (point compressed) */
     seckey.MakePublicKey(pubkey);
-    const ECP::Point& q = pubkey.GetPublicElement();
-
-    pubkey_hex.append(q.y.GetBit(0) ? "03" : "02");
-
-    ostream << std::hex << std::noshowbase << q.x;
-    std::string pubkey_data = ostream.str();
-    pubkey_data.resize(pubkey_data.length()-1);   // remove 'h' at the end
-    std::stringstream().swap(ostream);  // reset ostream
-
-    /* ensure that we are zero-filled on the left */
-    ostream.width(2*paseto_v3_PUBLIC_PUBLICKEYBYTES-2);
-    ostream.fill('0');
-    ostream << pubkey_data;
-    pubkey_hex.append(ostream.str());
+    pubkey_hex = p384_publickey_to_hex(pubkey);
 
     /* convert to binary */
     key_load_hex(public_key, public_key_len, pubkey_hex.c_str());
@@ -184,25 +148,8 @@ char *paseto_v3_public_sign(
         secret_key.MakePublicKey(public_key);
 
         /* get pubkey as point-compressed */
-        const ECP::Point& q = public_key.GetPublicElement();
-
-        /* convert q.x into a hex string */
         std::string pubkey_hex;
-        std::stringstream ostream;
-
-        pubkey_hex.reserve(2*paseto_v3_PUBLIC_PUBLICKEYBYTES + 1);
-        pubkey_hex.append(q.y.GetBit(0) ? "03" : "02");
-
-        ostream << std::hex << std::noshowbase << q.x;
-        std::string pubkey_data = ostream.str();
-        pubkey_data.resize(pubkey_data.length()-1);   // remove 'h' at the end
-
-        /* ensure that we are zero-filled on the left */
-        std::stringstream().swap(ostream);  // reset ostream
-        ostream.width(2*paseto_v3_PUBLIC_PUBLICKEYBYTES-2);
-        ostream.fill('0');
-        ostream << pubkey_data;
-        pubkey_hex.append(ostream.str());
+        pubkey_hex = p384_publickey_to_hex(public_key);
 
         size_t len = 0;
 
@@ -567,6 +514,20 @@ char * paseto_v3_secret_key_to_paserk(
     }
     else if (strncmp(paserk_id, paserk_secret_wrap, paserk_secret_wrap_len) == 0)
     {
+        size_t out_len;
+        uint8_t * out = paserk_v3_wrap(
+                &out_len,
+                paserk_secret_wrap, paserk_secret_wrap_len,
+                secret, secret_len,
+                key, paseto_v3_PUBLIC_SECRETKEYBYTES);
+        if (!out) {
+            errno = ENOMEM;
+            return NULL;
+        }
+        char * result = format_paserk_key(paserk_secret_wrap, paserk_secret_wrap_len,
+                                 out, out_len);
+        paseto_free(out);
+        return result;
     }
     else if (strncmp(paserk_id, paserk_secret_pw, paserk_secret_pw_len) == 0)
     {
@@ -594,6 +555,46 @@ bool paseto_v3_secret_key_from_paserk(
     }
     else if (strncmp(paserk_key, paserk_secret_wrap, paserk_secret_wrap_len) == 0)
     {
+        // decode the base64 data
+        size_t paserk_data_len = BASE64_TO_BIN_MAXLEN(paserk_key_len);
+        uint8_t * paserk_data = (uint8_t *) malloc(paserk_data_len);
+        if (!paserk_data) {
+            errno = ENOMEM;
+            return false;
+        }
+        if (sodium_base642bin(
+                paserk_data, paserk_data_len,
+                paserk_key + paserk_secret_wrap_len, paserk_key_len - paserk_secret_wrap_len,
+                NULL, &paserk_data_len, NULL,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0)
+        {
+            free(paserk_data);
+            return false;
+        }
+
+        size_t output_len;
+        uint8_t * result = paserk_v3_unwrap(
+            &output_len,
+            paserk_secret_wrap, paserk_secret_wrap_len,
+            secret, secret_len,
+            paserk_data, paserk_data_len);
+        if (!result) {
+            free(paserk_data);
+            return false;
+        }
+        if (output_len != paseto_v3_PUBLIC_SECRETKEYBYTES)
+        {
+            fprintf(stderr, "expecing a private key:  actual:%zu  expected:%d\n",
+                output_len, paseto_v3_PUBLIC_SECRETKEYBYTES);
+            free(result);
+            free(paserk_data);
+            errno = EINVAL;
+            return false;
+        }
+        memcpy(key, result, output_len);
+        free(result);
+        free(paserk_data);
+        return true;
     }
     else if (strncmp(paserk_key, paserk_secret_pw, paserk_secret_pw_len) == 0)
     {
