@@ -11,6 +11,10 @@ paseto_static_assert(
         paseto_v2_LOCAL_KEYBYTES == crypto_aead_chacha20poly1305_ietf_KEYBYTES,
         "KEYBYTES mismatch");
 
+paseto_static_assert(
+        crypto_pwhash_SALTBYTES == 16,
+        "libsodium password hashing is expected to be 16 bytes");
+
 
 static const uint8_t header[] = "v2.local.";
 static const size_t header_len = sizeof(header) - 1;
@@ -682,11 +686,228 @@ uint8_t * paserk_v2_unwrap(
     return plaintext;
 }
 
+uint8_t * paserk_v2_password_wrap(
+    size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *password, size_t password_len,
+    const uint8_t *data, size_t data_len,
+    v2PasswordParams *params)
+{
+    if (params == NULL) {
+        errno = EINVAL;
+        return NULL;
+    }
+    // #1. Generate a random 16-byte salt (s)
+    uint8_t salt[16];
+    randombytes_buf(salt, sizeof(salt));
+
+    // #2. Derive pre-key k from the password and salt (k)
+    uint8_t k[32];
+    if (crypto_pwhash(k, sizeof(k),
+            (const char *)password, password_len,
+            salt,
+            params->time, params->memory,
+            crypto_pwhash_ALG_ARGON2ID13) != 0)
+    {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    // #3. Derive encryption key (Ek)
+    // #4. Derive the authentication key (Ak)
+    uint8_t Ek[32];
+    uint8_t Ak[32];
+    {
+        uint8_t buffer[1 + sizeof(k)];
+        buffer[0] = 0xFF;
+        memcpy(buffer + 1, k, sizeof(k));
+        crypto_generichash(Ek, sizeof(Ek), buffer, sizeof(buffer), NULL, 0);
+
+        buffer[0] = 0xFE;
+        crypto_generichash(Ak, sizeof(Ak), buffer, sizeof(buffer), NULL, 0);
+    }
+
+    // #5. Generate random 24-byte nonce (n)
+    uint8_t nonce[24];
+    randombytes_buf(nonce, sizeof(nonce));
+
+    // #6. Encrypt plaintext key (ptk) to get encrypted data key (edk)
+    size_t edk_len = data_len;
+    uint8_t * edk = (uint8_t *) malloc(edk_len);
+    if (!edk) {
+        errno = ENOMEM;
+        return NULL;
+    }
+    crypto_stream_xchacha20_xor(
+        edk,
+        data, data_len,
+        nonce, Ek);
+
+    // #7. Calculate the authentication tag (tag)
+    // #8. Return the result
+    size_t buffer_len = header_len
+                        + sizeof(salt)
+                        + sizeof(uint64_t)      // mem
+                        + sizeof(uint32_t)      // time
+                        + sizeof(uint32_t)      // para
+                        + sizeof(nonce)
+                        + edk_len
+                        + 32;                   // sizeof(tag)
+    uint8_t * buffer = (uint8_t *) malloc(buffer_len);
+    if (!buffer) {
+        free(edk);
+        errno = ENOMEM;
+        return NULL;
+    }
+    {
+        uint8_t * current = buffer;
+        memcpy(current, header, header_len);
+        current += header_len;
+
+        memcpy(current, salt, sizeof(salt));
+        current += sizeof(salt);
+
+        current = WRITE64BE(current, params->memory);
+        current = WRITE32BE(current, params->time);
+        current = WRITE32BE(current, params->parallelism);
+
+        memcpy(current, nonce, sizeof(nonce));
+        current += sizeof(nonce);
+
+        memcpy(current, edk, edk_len);
+        current += edk_len;
+
+        // This will place the tag at the end of the
+        // buffer, so that it's ready for output
+        crypto_generichash(current, 32,
+                buffer, current - buffer,
+                Ak, sizeof(Ak));
+    }
+    free(edk);
+
+    // Now move the buffer down (we do not want to return the header)
+    memmove(buffer, buffer + header_len, buffer_len - header_len);
+
+    if (output_len)
+        *output_len = buffer_len - header_len;
+    return buffer;
+}
+
+
+uint8_t * paserk_v2_password_unwrap(
+    size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *password, size_t password_len,
+    const uint8_t *data, size_t data_len)
+{
+    v2PasswordParams params;
+    size_t salt_len = 16;
+    size_t nonce_len = 24;
+    size_t tag_len = 32;
+
+    const uint8_t * current = data;
+    const uint8_t * salt = current;
+    current += salt_len;
+    current += sizeof(uint64_t);    // mem
+    current += sizeof(uint32_t);    // time
+    current += sizeof(uint32_t);    // para
+    const uint8_t * nonce = current;
+    current += nonce_len;
+    const uint8_t * ciphertext = current;
+
+    size_t ciphertext_len = data_len - (current - data) - tag_len;
+    current += ciphertext_len;
+    const uint8_t * tag = current;
+
+    // Read in the params structure
+    {
+        const uint8_t * p = salt + salt_len;
+        params.memory = READ64BE(p);
+        p += sizeof(uint64_t);
+        //params.memory /= 1024u;
+
+        params.time = READ32BE(p);
+        p += sizeof(uint32_t);
+
+        params.parallelism = READ32BE(p);
+    }
+
+    // #1. Algorithm lucidity
+    // #2. Derive pre-key k
+    uint8_t prekey[32];
+    if (crypto_pwhash(prekey, sizeof(prekey),
+            (const char *) password, password_len,
+            salt,
+            params.time, params.memory,
+            crypto_pwhash_ALG_ARGON2ID13) != 0)
+    {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    // #3. Recalculate the auth key (Ak)
+    uint8_t Ak[32];
+    {
+        uint8_t buffer[1 + sizeof(prekey)];
+        buffer[0] = 0xFE;
+        memcpy(buffer + 1, prekey, sizeof(prekey));
+        crypto_generichash(Ak, sizeof(Ak), buffer, sizeof(buffer), NULL, 0);
+    }
+
+    // #4. Recalculate the tag (t2)
+    uint8_t tag2[32];
+    {
+        uint8_t * buffer = (uint8_t *) malloc(data_len + header_len - tag_len);
+        if (!buffer) {
+            errno = ENOMEM;
+            return NULL;
+        }
+        memcpy(buffer, header, header_len);
+        memcpy(buffer + header_len, data, data_len - tag_len);
+        crypto_generichash(tag2, sizeof(tag2), buffer, header_len + data_len - tag_len, Ak, sizeof(Ak));
+        free(buffer);
+    }
+
+    // #5. Compare t2 with the oriinal tag
+    if (sodium_memcmp(tag, tag2, sizeof(tag2)) != 0)
+    {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    // #6. Derive the encryption key (Ek)
+    uint8_t Ek[32];
+    {
+        uint8_t buffer[1 + sizeof(prekey)];
+        buffer[0] = 0xFF;
+        memcpy(buffer + 1, prekey, sizeof(prekey));
+        crypto_generichash(Ek, sizeof(Ek), buffer, sizeof(buffer), NULL, 0);
+    }
+
+    // #7. Decrypt the encrypted data key (edk)
+    size_t plaintext_len = ciphertext_len;
+    uint8_t * plaintext = (uint8_t *) malloc(plaintext_len);
+    if (!plaintext) {
+        errno = ENOMEM;
+        return NULL;
+    }
+    crypto_stream_xchacha20_xor(
+        plaintext,
+        ciphertext, ciphertext_len,
+        nonce, Ek);
+
+    // #8. Return the plaintext key (ptk)
+    if (output_len)
+        *output_len = plaintext_len;
+    return plaintext;
+}
+
+
 char * paseto_v2_local_key_to_paserk(
     uint8_t key[paseto_v2_LOCAL_KEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v2PasswordParams *opts)
+    v2PasswordParams *opts)
 {
     if (!paserk_id)
     {
@@ -750,10 +971,22 @@ char * paseto_v2_local_key_to_paserk(
     }
     else if (strncmp(paserk_id, paserk_local_pw, paserk_local_pw_len) == 0)
     {
+        size_t out_len;
+        uint8_t * out = paserk_v2_password_wrap(
+                    &out_len,
+                    paserk_local_pw, paserk_local_pw_len,
+                    secret, secret_len,
+                    key, paseto_v2_LOCAL_KEYBYTES,
+                    opts);
+        char * output = format_paserk_key(paserk_local_pw, paserk_local_pw_len,
+                                out, out_len);
+        free(out);
+        return output;
     }
     errno = EINVAL;
     return NULL;
 }
+
 
 bool paseto_v2_local_key_from_paserk(
     uint8_t key[paseto_v2_LOCAL_KEYBYTES],
@@ -863,6 +1096,48 @@ bool paseto_v2_local_key_from_paserk(
     }
     else if (strncmp(paserk_key, paserk_local_pw, paserk_local_pw_len) == 0)
     {
+        // decode the base64 data
+        size_t paserk_data_len = BASE64_TO_BIN_MAXLEN(paserk_key_len);
+        uint8_t * paserk_data = (uint8_t *) malloc(paserk_data_len);
+        if (!paserk_data) {
+            errno = ENOMEM;
+            return false;
+        }
+        size_t len;
+        if (sodium_base642bin(
+                paserk_data, paserk_data_len,
+                paserk_key + paserk_local_pw_len, paserk_key_len - paserk_local_pw_len,
+                NULL, &len, NULL,
+                sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0)
+        {
+            free(paserk_data);
+            return false;
+        }
+
+        size_t output_len;
+        uint8_t * pdk = paserk_v2_password_unwrap(
+                        &output_len,
+                        paserk_local_pw, paserk_local_pw_len,
+                        secret, secret_len,
+                        paserk_data, len);
+        if (!pdk) {
+            free(paserk_data);
+            return false;
+        }
+        free(paserk_data);
+
+        if (output_len != paseto_v2_LOCAL_KEYBYTES)
+        {
+            fprintf(stderr, "unwrapped key length mismatch: actual:%zu expected:%u\n",
+                output_len, paseto_v2_LOCAL_KEYBYTES);
+            free(pdk);
+            errno = EINVAL;
+            return false;
+        }
+        memcpy(key, pdk, paseto_v2_LOCAL_KEYBYTES);
+
+        free(pdk);
+        return true;
     }
     errno = EINVAL;
     return false;

@@ -425,6 +425,16 @@ private:
 };
 
 
+struct PasswordParams
+{
+    union {
+        v2PasswordParams v2;
+        v3PasswordParams v3;
+        v4PasswordParams v4;
+    } params;
+};
+
+
 class Key
 {
 public:
@@ -543,7 +553,7 @@ public:
         throw UnexpectedException("Not yet implemented");
     }
 
-    virtual std::string toPaserkPassword(const std::string &pw, int itercount=100000)
+    virtual std::string toPaserkPassword(const std::string &pw, struct PasswordParams *opts)
     {
         throw UnexpectedException("Not yet implemented");
     }
@@ -563,7 +573,7 @@ public:
         throw UnexpectedException("Not yet implemented");
     }
 
-    virtual std::string loadPaserkPassword()
+    virtual void fromPaserkPassword(const std::string &paserk, const std::string &password)
     {
         throw UnexpectedException("Not yet implemented");
     }
@@ -637,15 +647,6 @@ private:
 
 // Helper functions
 
-struct PasswordParams
-{
-    union {
-        v2PasswordParams v2;
-        v3PasswordParams v3;
-        v4PasswordParams v4;
-    } params;
-};
-
 
 template<typename T>
 using FN_TOPASERK =  char * (*)(uint8_t *, const char *, const uint8_t *, size_t, T *);
@@ -655,17 +656,17 @@ using FN_FROMPASERK =  bool (*)(uint8_t *, const char *, size_t, const uint8_t *
 template<typename T>
 using FN_CONVERT_PARAMS =  T * (*)(struct PasswordParams *);
 
-struct v2PasswordParams * convert_v2(struct PasswordParams *p)
+v2PasswordParams * convert_v2(struct PasswordParams *p)
 {
     return p == NULL ? NULL : &(p->params.v2);
 }
 
-struct v3PasswordParams * convert_v3(struct PasswordParams *p)
+v3PasswordParams * convert_v3(struct PasswordParams *p)
 {
     return p == NULL ? NULL : &(p->params.v3);
 }
 
-struct v4PasswordParams * convert_v4(struct PasswordParams *p)
+v4PasswordParams * convert_v4(struct PasswordParams *p)
 {
     return p == NULL ? NULL : &(p->params.v4);
 }
@@ -673,13 +674,17 @@ struct v4PasswordParams * convert_v4(struct PasswordParams *p)
 
 template<typename T, FN_TOPASERK<T> topaserk>
 std::string buildPaserk(paseto::Key *key, const std::string &paserk_id,
-    const uint8_t *secret, size_t secret_len)
+    const uint8_t *secret, size_t secret_len, T * opts)
 {
+    if (!paseto_init())
+        throw UnexpectedException(
+                fmt::format("Unexpected: paseto_init() failed (line {})", __LINE__));
+
     char * paserk_key = nullptr;
     auto guard = paseto::on_scope_exit( [&]()
         { paseto_free(paserk_key);  });
 
-    paserk_key = topaserk(key->data(), paserk_id.c_str(), secret, secret_len, NULL);
+    paserk_key = topaserk(key->data(), paserk_id.c_str(), secret, secret_len, opts);
     if (paserk_key == NULL)
         throw UnexpectedException(
             fmt::format("Unexpected: {}({}) (line {})",
@@ -695,6 +700,10 @@ void loadPaserk(paseto::Key *key,
     const std::string &paserk,
     const uint8_t *secret, size_t secret_len)
 {
+    if (!paseto_init())
+        throw UnexpectedException(
+                fmt::format("Unexpected: paseto_init() failed (line {})", __LINE__));
+
     key->clear();
 
     // These checks are redudant (they are also performed in the C api)
@@ -739,7 +748,7 @@ public:
     std::string toPaserk() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.local.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.local.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     void fromPaserk(const std::string &paserk) override
@@ -754,13 +763,13 @@ public:
     std::string toPaserkId() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.lid.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.lid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     std::string toPaserkSeal(const BinaryView &pk) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.seal.", KeyTypeVersion(_key_type)), pk.data(), pk.size());
+            fmt::format("k{}.seal.", KeyTypeVersion(_key_type)), pk.data(), pk.size(), NULL);
     }
 
     void fromPaserkSeal(const std::string &paserk, const BinaryView &sk) override
@@ -775,7 +784,7 @@ public:
     std::string toPaserkWrap(const BinaryView &wk) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size());
+            fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
     }
 
     void fromPaserkWrap(const std::string &paserk, const BinaryView &wk) override
@@ -783,6 +792,23 @@ public:
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)),
             paserk, wk.data(), wk.size());
+
+        _is_loaded = true;
+    }
+
+    std::string toPaserkPassword(const std::string &pw, struct PasswordParams *opts) override
+    {
+        return buildPaserk<T, topaserk>(this,
+            fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
+                reinterpret_cast<const uint8_t *>(pw.data()), pw.size(), fnconvert(opts));
+    }
+
+
+    void fromPaserkPassword(const std::string &paserk, const std::string &password) override
+    {
+        loadPaserk<T, frompaserk>(this,
+            fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
+            paserk, reinterpret_cast<const uint8_t *>(password.data()), password.length());
 
         _is_loaded = true;
     }
@@ -860,7 +886,7 @@ public:
     std::string toPaserk() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.public.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.public.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     void fromPaserk(const std::string &paserk) override
@@ -875,7 +901,7 @@ public:
     std::string toPaserkId() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.pid.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.pid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     Token verify(
@@ -923,7 +949,7 @@ public:
     std::string toPaserk() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.secret.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.secret.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     void fromPaserk(const std::string &paserk) override
@@ -938,13 +964,13 @@ public:
     std::string toPaserkId() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.sid.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.sid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     std::string toPaserkWrap(const BinaryView &wk) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size());
+            fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
     }
 
     void fromPaserkWrap(const std::string &paserk, const BinaryView &wk) override
@@ -952,6 +978,23 @@ public:
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)),
             paserk, wk.data(), wk.size());
+
+        _is_loaded = true;
+    }
+
+    std::string toPaserkPassword(const std::string &pw, struct PasswordParams *opts) override
+    {
+        return buildPaserk<T, topaserk>(this,
+            fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
+                reinterpret_cast<const uint8_t *>(pw.data()), pw.size(), fnconvert(opts));
+    }
+
+
+    void fromPaserkPassword(const std::string &paserk, const std::string &password) override
+    {
+        loadPaserk<T, frompaserk>(this,
+            fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
+            paserk, reinterpret_cast<const uint8_t *>(password.data()), password.length());
 
         _is_loaded = true;
     }
@@ -1002,7 +1045,7 @@ public:
     std::string toPaserk() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.local.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.local.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     void fromPaserk(const std::string &paserk) override
@@ -1017,13 +1060,13 @@ public:
     std::string toPaserkId() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.lid.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.lid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     std::string toPaserkSeal(const BinaryView &pk) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.seal.", KeyTypeVersion(_key_type)), pk.data(), pk.size());
+            fmt::format("k{}.seal.", KeyTypeVersion(_key_type)), pk.data(), pk.size(), NULL);
     }
 
     void fromPaserkSeal(const std::string &paserk, const BinaryView &sk) override
@@ -1038,7 +1081,7 @@ public:
     std::string toPaserkWrap(const BinaryView &wk) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size());
+            fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
     }
 
     void fromPaserkWrap(const std::string &paserk, const BinaryView &wk) override
@@ -1046,6 +1089,23 @@ public:
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)),
             paserk, wk.data(), wk.size());
+
+        _is_loaded = true;
+    }
+
+    std::string toPaserkPassword(const std::string &pw, struct PasswordParams *opts) override
+    {
+        return buildPaserk<T, topaserk>(this,
+            fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
+                reinterpret_cast<const uint8_t *>(pw.data()), pw.size(), fnconvert(opts));
+    }
+
+
+    void fromPaserkPassword(const std::string &paserk, const std::string &password) override
+    {
+        loadPaserk<T, frompaserk>(this,
+            fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
+            paserk, reinterpret_cast<const uint8_t *>(password.data()), password.length());
 
         _is_loaded = true;
     }
@@ -1116,7 +1176,7 @@ public:
     std::string toPaserk() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.public.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.public.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     void fromPaserk(const std::string &paserk) override
@@ -1131,7 +1191,7 @@ public:
     std::string toPaserkId() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.pid.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.pid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     Token verify(
@@ -1174,7 +1234,7 @@ public:
     std::string toPaserk() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.secret.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.secret.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     void fromPaserk(const std::string &paserk) override
@@ -1189,13 +1249,13 @@ public:
     std::string toPaserkId() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.sid.", KeyTypeVersion(_key_type)), NULL, 0);
+            fmt::format("k{}.sid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
     std::string toPaserkWrap(const BinaryView &wk) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size());
+            fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
     }
 
     void fromPaserkWrap(const std::string &paserk, const BinaryView &wk) override
@@ -1206,6 +1266,24 @@ public:
 
         _is_loaded = true;
     }
+
+    std::string toPaserkPassword(const std::string &pw, struct PasswordParams *opts) override
+    {
+        return buildPaserk<T, topaserk>(this,
+            fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
+                reinterpret_cast<const uint8_t *>(pw.data()), pw.size(), fnconvert(opts));
+    }
+
+
+    void fromPaserkPassword(const std::string &paserk, const std::string &password) override
+    {
+        loadPaserk<T, frompaserk>(this,
+            fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
+            paserk, reinterpret_cast<const uint8_t *>(password.data()), password.length());
+
+        _is_loaded = true;
+    }
+
 
     std::string sign(
                 const BinaryView &payload,
@@ -1232,7 +1310,7 @@ public:
 };
 
 
-typedef LocalKey<struct v2PasswordParams,
+typedef LocalKey<v2PasswordParams,
             KeyType::V2_LOCAL,
             paseto_v2_LOCAL_KEYBYTES,
             paseto_v2_local_encrypt,
@@ -1240,14 +1318,14 @@ typedef LocalKey<struct v2PasswordParams,
             paseto_v2_local_key_to_paserk,
             paseto_v2_local_key_from_paserk,
             convert_v2> PasetoV2LocalKey;
-typedef PublicKey<struct v2PasswordParams,
+typedef PublicKey<v2PasswordParams,
             KeyType::V2_PUBLIC,
             paseto_v2_PUBLIC_PUBLICKEYBYTES,
             paseto_v2_public_verify,
             paseto_v2_public_key_to_paserk,
             paseto_v2_public_key_from_paserk,
             convert_v2> PasetoV2PublicKey;
-typedef SecretKey<struct v2PasswordParams,
+typedef SecretKey<v2PasswordParams,
             KeyType::V2_SECRET,
             paseto_v2_PUBLIC_SECRETKEYBYTES,
             paseto_v2_public_sign,
@@ -1255,7 +1333,7 @@ typedef SecretKey<struct v2PasswordParams,
             paseto_v2_secret_key_from_paserk,
             convert_v2> PasetoV2SecretKey;
 
-typedef LocalKey2<struct v3PasswordParams,
+typedef LocalKey2<v3PasswordParams,
             KeyType::V3_LOCAL,
             paseto_v3_LOCAL_KEYBYTES,
             paseto_v3_local_encrypt,
@@ -1263,14 +1341,14 @@ typedef LocalKey2<struct v3PasswordParams,
             paseto_v3_local_key_to_paserk,
             paseto_v3_local_key_from_paserk,
             convert_v3> PasetoV3LocalKey;
-typedef PublicKey2<struct v3PasswordParams,
+typedef PublicKey2<v3PasswordParams,
             KeyType::V3_PUBLIC,
             paseto_v3_PUBLIC_PUBLICKEYBYTES,
             paseto_v3_public_verify,
             paseto_v3_public_key_to_paserk,
             paseto_v3_public_key_from_paserk,
             convert_v3> PasetoV3PublicKey;
-typedef SecretKey2<struct v3PasswordParams,
+typedef SecretKey2<v3PasswordParams,
             KeyType::V3_SECRET,
             paseto_v3_PUBLIC_SECRETKEYBYTES,
             paseto_v3_public_sign,
@@ -1278,7 +1356,7 @@ typedef SecretKey2<struct v3PasswordParams,
             paseto_v3_secret_key_from_paserk,
             convert_v3> PasetoV3SecretKey;
 
-typedef LocalKey2<struct v4PasswordParams,
+typedef LocalKey2<v4PasswordParams,
             KeyType::V4_LOCAL,
             paseto_v4_LOCAL_KEYBYTES,
             paseto_v4_local_encrypt,
@@ -1286,14 +1364,14 @@ typedef LocalKey2<struct v4PasswordParams,
             paseto_v4_local_key_to_paserk,
             paseto_v4_local_key_from_paserk,
             convert_v4> PasetoV4LocalKey;
-typedef PublicKey2<struct v4PasswordParams,
+typedef PublicKey2<v4PasswordParams,
             KeyType::V4_PUBLIC,
             paseto_v4_PUBLIC_PUBLICKEYBYTES,
             paseto_v4_public_verify,
             paseto_v4_public_key_to_paserk,
             paseto_v4_public_key_from_paserk,
             convert_v4> PasetoV4PublicKey;
-typedef SecretKey2<struct v4PasswordParams,
+typedef SecretKey2<v4PasswordParams,
             KeyType::V4_SECRET,
             paseto_v4_PUBLIC_SECRETKEYBYTES,
             paseto_v4_public_sign,

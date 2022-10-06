@@ -212,6 +212,7 @@ char *paseto_v3_local_encrypt(
         hmac.Final(digest);
     }
 
+    sodium_memzero(pa.base, pre_auth_len);
     free(pa.base);
 
     /* #8. Build the output */
@@ -221,11 +222,13 @@ char *paseto_v3_local_encrypt(
                        footer, footer_len);
     if (output == NULL)
     {
+        sodium_memzero(to_encode, to_encode_len);
         free(to_encode);
         errno = EINVAL;
         return NULL;
     }
 
+    sodium_memzero(to_encode, to_encode_len);
     free(to_encode);
 
     return output;
@@ -650,7 +653,7 @@ char * paseto_v3_local_key_to_paserk(
     uint8_t key[paseto_v3_LOCAL_KEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v3PasswordParams *opts)
+    v3PasswordParams *opts)
 {
     if (!paserk_id)
     {

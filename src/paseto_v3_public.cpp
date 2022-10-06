@@ -380,7 +380,7 @@ char * paseto_v3_public_key_to_paserk(
     uint8_t key[paseto_v3_PUBLIC_PUBLICKEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v3PasswordParams *opts)
+    v3PasswordParams *opts)
 {
     if (!paserk_id)
     {
@@ -467,7 +467,7 @@ char * paseto_v3_secret_key_to_paserk(
     uint8_t key[paseto_v3_PUBLIC_SECRETKEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v3PasswordParams *opts)
+    v3PasswordParams *opts)
 {
     if (!paserk_id)
     {

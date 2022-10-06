@@ -14,26 +14,18 @@ extern "C"{
 #define P384_SECRETKEYBYTES             48u
 
 
-struct v2PasswordParams
+typedef struct
 {
     // argon2id parameters
     uint64_t memory;
     uint32_t time;
     uint32_t parallelism;
-};
+} v2PasswordParams, v4PasswordParams;
 
-struct v3PasswordParams
+typedef struct
 {
     uint32_t iterations;
-};
-
-struct v4PasswordParams
-{
-    // argon2id parameters
-    uint64_t memory;
-    uint32_t time;
-    uint32_t parallelism;
-};
+} v3PasswordParams;
 
 /**
  * Saves the key as a paserk key.
@@ -55,7 +47,7 @@ char * paseto_v2_local_key_to_paserk(
     uint8_t key[paseto_v2_LOCAL_KEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v2PasswordParams *opts);
+    v2PasswordParams *opts);
 
 /**
  * Extracts the key from the paserk key.
@@ -88,7 +80,7 @@ char * paseto_v2_public_key_to_paserk(
     uint8_t key[paseto_v2_PUBLIC_PUBLICKEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v2PasswordParams *opts);
+    v2PasswordParams *opts);
 
 /**
  * Extracts the key from the paserk key.
@@ -121,7 +113,7 @@ char * paseto_v2_secret_key_to_paserk(
     uint8_t key[paseto_v2_PUBLIC_SECRETKEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v2PasswordParams *opts);
+    v2PasswordParams *opts);
 
 /**
  * Extracts the key from the paserk key.
@@ -158,12 +150,26 @@ uint8_t * paserk_v2_unwrap(
     const uint8_t *wrapkey, size_t wrapkey_len,
     const uint8_t *data, size_t data_len);
 
+uint8_t * paserk_v2_password_wrap(
+    size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *password, size_t password_len,
+    const uint8_t *data, size_t data_len,
+    v2PasswordParams *params);
+
+uint8_t * paserk_v2_password_unwrap(
+    size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *password, size_t password_len,
+    const uint8_t *data, size_t data_len);
+
+
 
 char * paseto_v3_local_key_to_paserk(
     uint8_t key[paseto_v3_LOCAL_KEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v3PasswordParams *opts);
+    v3PasswordParams *opts);
 
 bool paseto_v3_local_key_from_paserk(
     uint8_t key[paseto_v3_LOCAL_KEYBYTES],
@@ -174,7 +180,7 @@ char * paseto_v3_public_key_to_paserk(
     uint8_t key[paseto_v3_PUBLIC_PUBLICKEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v3PasswordParams *opts);
+    v3PasswordParams *opts);
 
 bool paseto_v3_public_key_from_paserk(
     uint8_t key[paseto_v3_PUBLIC_PUBLICKEYBYTES],
@@ -185,7 +191,7 @@ char * paseto_v3_secret_key_to_paserk(
     uint8_t key[paseto_v3_PUBLIC_SECRETKEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v3PasswordParams *opts);
+    v3PasswordParams *opts);
 
 bool paseto_v3_secret_key_from_paserk(
     uint8_t key[paseto_v3_PUBLIC_SECRETKEYBYTES],
@@ -210,7 +216,7 @@ char * paseto_v4_local_key_to_paserk(
     uint8_t key[paseto_v4_LOCAL_KEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v4PasswordParams *opts);
+    v4PasswordParams *opts);
 
 bool paseto_v4_local_key_from_paserk(
     uint8_t key[paseto_v4_LOCAL_KEYBYTES],
@@ -221,7 +227,7 @@ char * paseto_v4_public_key_to_paserk(
     uint8_t key[paseto_v4_PUBLIC_PUBLICKEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v4PasswordParams *opts);
+    v4PasswordParams *opts);
 
 bool paseto_v4_public_key_from_paserk(
     uint8_t key[paseto_v4_PUBLIC_PUBLICKEYBYTES],
@@ -232,7 +238,7 @@ char * paseto_v4_secret_key_to_paserk(
     uint8_t key[paseto_v4_PUBLIC_SECRETKEYBYTES],
     const char *paserk_id,
     const uint8_t * secret, size_t secret_len,
-    struct v4PasswordParams *opts);
+    v4PasswordParams *opts);
 
 bool paseto_v4_secret_key_from_paserk(
     uint8_t key[paseto_v4_PUBLIC_SECRETKEYBYTES],

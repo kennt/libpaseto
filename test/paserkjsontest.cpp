@@ -240,8 +240,122 @@ void run_lid_test_vector(json &j, std::string version)
     run_no_params_test_vector(j, version, "local", fEncode, nullptr);
 }
 
-void run_local_pw_test_vector(json &j, std::string version)
+void run_pw_test_vector(json &j, std::string version, const std::string &sKeyType)
 {
+    try
+    {
+        paseto::KeyType keytype = KeyTypeForTest(version, sKeyType);
+        for (const auto& element : j["tests"])
+        {
+            total_test_count ++;
+
+            string name = element["name"].get<string>();
+            bool expect_fail = element["expect-fail"].get<bool>();
+            string unwrapped;
+            if (!element["unwrapped"].is_null())
+                unwrapped = element["unwrapped"].get<string>();
+            string paserk;
+            if (!element["paserk"].is_null())
+                paserk = element["paserk"].get<string>();
+            string password = element["password"].get<string>();
+            bool test_ok = true;
+
+            paseto::PasswordParams params;
+            if ((version == "k2") || (version == "k4"))
+            {
+                if (element["options"].contains("memlimit"))
+                    params.params.v2.memory = element["options"]["memlimit"].get<uint64_t>();
+                else
+                    params.params.v2.memory = 8192;
+                if (element["options"].contains("opslimit"))
+                    params.params.v2.time = element["options"]["opslimit"].get<uint32_t>();
+                else
+                    params.params.v2.time = 2;
+            }
+            else if (version == "k3")
+            {
+                params.params.v3.iterations = element["options"]["iterations"].get<uint32_t>();
+            }
+
+            // We really can't test sealing (since it uses an ephemeral pk/sk)
+            // So we can only test unsealing (with the test data)
+            // (but will also test sealing/unsealing ourselves)
+
+            cout << name << " " << "expect-fail:" << expect_fail;
+            if (!expect_fail)
+            {
+                test_ok = true;
+                // self-test
+                // seal and unseal
+                std::string actual;
+                std::unique_ptr<paseto::Key> paserk_key;
+                std::unique_ptr<paseto::Key> unsealed_key;
+
+                paserk_key = paseto::Keys::createFromHex(keytype, unwrapped);
+
+                // copies paserk_key to a wrap
+                actual = paserk_key->toPaserkPassword(password, &params);
+
+                // convert back into a key
+                unsealed_key = paseto::Keys::create(keytype);
+                unsealed_key->fromPaserkPassword(actual, password);
+
+                // this should be the same as paserk_key
+                if (*paserk_key == *unsealed_key)
+                    cout << "  self-test:pass";
+                else
+                {
+                    test_ok = false;
+                    cout << "  self-test:FAILED";
+                }
+            }
+            {
+                std::string paserk_hex;
+                try
+                {
+                    test_ok = true;
+
+                    std::unique_ptr<paseto::Key> paserk_key = paseto::Keys::create(keytype);
+                    paserk_key->fromPaserkPassword(element["paserk"].get<std::string>(), password);
+
+                    std::string paserk_hex = paserk_key->toHex();
+                    test_ok = (paserk_hex == unwrapped);
+                }
+                catch (exception ex)
+                {
+                    test_ok = false;
+                    if (!expect_fail)
+                    {
+                        cout << endl << ex.what() << endl;
+                        //cout << "caught an exception, continuing..." << endl;
+                    }
+                }
+                if (test_ok == expect_fail)
+                {
+                    failed_test_count ++;
+                    failed_test_vectors.insert(name);
+                    if (!expect_fail)
+                    {
+                        cout << endl;
+                        cout << "actual : " << paserk_hex.length() << " : " << paserk_hex << endl;
+                        cout << "expect : " << unwrapped.length() << " : " << unwrapped << endl;
+                    }
+                }
+
+                if (test_ok != expect_fail)
+                    cout << "  decode: pass";
+                else
+                    cout << "  decode: FAILED";
+            }
+            cout << endl;
+        }
+    }
+    catch (exception &ex)
+    {
+        cout << endl << ex.what() << endl;
+        cout << "caught an exception, continuing..." << endl;
+    }
+
 }
 
 void run_local_wrap_pie_test_vector(json &j, std::string version, const std::string &sKeyType)
@@ -525,13 +639,13 @@ void run_test_vector(const std::string &filename)
     cout << "File: " << filename << "  Name: " << j["name"] << endl;
 
     if (test_type == "lid") run_lid_test_vector(j, version);
-    else if (test_type == "local-pw") run_local_pw_test_vector(j, version);
+    else if (test_type == "local-pw") run_pw_test_vector(j, version, "local");
     else if (test_type == "local-wrap.pie") run_local_wrap_pie_test_vector(j, version, "local");
     else if (test_type == "local") run_local_test_vector(j, version);
     else if (test_type == "pid") run_pid_test_vector(j, version);
     else if (test_type == "public") run_public_test_vector(j, version);
     else if (test_type == "seal") run_seal_test_vector(j, version, "local");
-    else if (test_type == "secret-pw") run_secret_pw_test_vector(j, version);
+    else if (test_type == "secret-pw") run_pw_test_vector(j, version, "secret");
     else if (test_type == "secret-wrap.pie") run_secret_wrap_pie_test_vector(j, version);
     else if (test_type == "secret") run_secret_test_vector(j, version);
     else if (test_type == "sid") run_sid_test_vector(j, version);
