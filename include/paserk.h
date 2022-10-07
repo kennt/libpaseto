@@ -210,6 +210,19 @@ uint8_t * paserk_v3_unwrap(
     const uint8_t *wrapkey, size_t wrapkey_len,
     const uint8_t *data, size_t data_len);
 
+uint8_t * paserk_v3_password_wrap(
+    size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *password, size_t password_len,
+    const uint8_t *data, size_t data_len,
+    v3PasswordParams *params);
+
+uint8_t * paserk_v3_password_unwrap(
+    size_t *output_len,
+    const char * header, size_t header_len,
+    const uint8_t *password, size_t password_len,
+    const uint8_t *data, size_t data_len);
+
 
 
 char * paseto_v4_local_key_to_paserk(

@@ -274,7 +274,10 @@ void run_pw_test_vector(json &j, std::string version, const std::string &sKeyTyp
             }
             else if (version == "k3")
             {
-                params.params.v3.iterations = element["options"]["iterations"].get<uint32_t>();
+                if (element["options"].contains("iterations"))
+                    params.params.v3.iterations = element["options"]["iterations"].get<uint32_t>();
+                else
+                    params.params.v3.iterations = 1000;
             }
 
             // We really can't test sealing (since it uses an ephemeral pk/sk)
