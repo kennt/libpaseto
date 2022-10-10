@@ -410,7 +410,7 @@ char * paseto_v4_local_key_to_paserk(
     else if (strncmp(paserk_id, paserk_seal, paserk_seal_len) == 0)
     {
         size_t encoded_len = 0;
-        uint8_t * encoded = paserk_v2_seal_encrypt(&encoded_len,
+        uint8_t * encoded = paserk_v2_seal(&encoded_len,
             paserk_seal, paserk_seal_len,
             secret, secret_len,
             key, paseto_v4_LOCAL_KEYBYTES);

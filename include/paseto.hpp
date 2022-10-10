@@ -8,6 +8,7 @@ extern "C" {
 #include "paseto.h"
 #include "paserk.h"
 };
+#include "helpers.hpp"
 
 #include <cstring>
 #include <exception>
@@ -20,6 +21,9 @@ extern "C" {
 #include <vector>
 
 #include <iostream>
+
+#include "cryptopp/filters.h"
+#include "pem.h"
 
 namespace paseto {
 
@@ -302,11 +306,6 @@ public:
         return vec;
     }
 
-    static BinaryVector fromPem(const std::string s)
-    {
-        return BinaryVector();
-    }
-
     inline static BinaryView none;
 };
 
@@ -543,12 +542,17 @@ public:
         throw UnexpectedException("Not yet implemented");
     }
 
-    virtual std::string toPaserkWrap(const BinaryView &wk)
+    virtual std::string toPaserkWrap(const BinaryView &wrapping_key)
     {
         throw UnexpectedException("Not yet implemented");
     }
 
-    virtual std::string toPaserkSeal(const BinaryView &pk)
+    virtual std::string toPaserkSeal(const BinaryView &public_key)
+    {
+        throw UnexpectedException("Not yet implemented");
+    }
+
+    virtual std::string toPaserkSeal(Key * public_key)
     {
         throw UnexpectedException("Not yet implemented");
     }
@@ -569,6 +573,11 @@ public:
     }
 
     virtual void fromPaserkSeal(const std::string &paserk, const BinaryView &sk)
+    {
+        throw UnexpectedException("Not yet implemented");
+    }
+
+    virtual void fromPaserkSeal(const std::string &paserk, Key * secret_key)
     {
         throw UnexpectedException("Not yet implemented");
     }
@@ -772,6 +781,26 @@ public:
             fmt::format("k{}.seal.", KeyTypeVersion(_key_type)), pk.data(), pk.size(), NULL);
     }
 
+    std::string toPaserkSeal(Key * public_key) override
+    {
+        if (public_key == NULL)
+            throw UnexpectedException("unexpected: a public_key must be provided");
+
+        // Only public keys of the same version are allowed
+        // Although technically v2 and v4 are interchangeable
+        if (KeyTypeVersion(_key_type) != KeyTypeVersion(public_key->keyType()))
+            throw UnexpectedException(
+                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
+                    KeyTypeVersion(public_key->keyType()), KeyTypeVersion(_key_type)));
+        if (strcmp(KeyTypePurpose(public_key->keyType()), "public") != 0)
+            throw UnexpectedException(
+                fmt::format("unexpected: must be a public key: actual:{}",
+                    KeyTypePurpose(public_key->keyType())));
+
+        public_key->checkKey();
+        return toPaserkSeal(BinaryView(public_key->data(), public_key->size()));
+    }
+
     void fromPaserkSeal(const std::string &paserk, const BinaryView &sk) override
     {
         loadPaserk<T, frompaserk>(this,
@@ -779,6 +808,27 @@ public:
             paserk, sk.data(), sk.size());
 
         _is_loaded = true;
+    }
+
+    void fromPaserkSeal(const std::string &paserk, Key * secret_key) override
+    {
+        if (secret_key == NULL)
+            throw UnexpectedException("unexpected: a secret_key must be provided");
+
+        // Only secret keys of the same version are allowed
+        // Although technically v2 and v4 are interchangeable
+        if (KeyTypeVersion(_key_type) != KeyTypeVersion(secret_key->keyType()))
+            throw UnexpectedException(
+                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
+                    KeyTypeVersion(secret_key->keyType()), KeyTypeVersion(_key_type)));
+        if (strcmp(KeyTypePurpose(secret_key->keyType()), "secret") != 0)
+            throw UnexpectedException(
+                fmt::format("unexpected: must be a secret key: actual:{}",
+                    KeyTypePurpose(secret_key->keyType())));
+
+        secret_key->checkKey();
+
+        fromPaserkSeal(paserk, BinaryView(secret_key->data(), secret_key->size()));
     }
 
     std::string toPaserkWrap(const BinaryView &wk) override
@@ -1069,6 +1119,26 @@ public:
             fmt::format("k{}.seal.", KeyTypeVersion(_key_type)), pk.data(), pk.size(), NULL);
     }
 
+    std::string toPaserkSeal(Key * public_key) override
+    {
+        if (public_key == NULL)
+            throw UnexpectedException("unexpected: a public_key must be provided");
+
+        // Only public keys of the same version are allowed
+        // Although technically v2 and v4 are interchangeable
+        if (KeyTypeVersion(_key_type) != KeyTypeVersion(public_key->keyType()))
+            throw UnexpectedException(
+                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
+                    KeyTypeVersion(public_key->keyType()), KeyTypeVersion(_key_type)));
+        if (strcmp(KeyTypePurpose(public_key->keyType()), "public") != 0)
+            throw UnexpectedException(
+                fmt::format("unexpected: must be a public key: actual:{}",
+                    KeyTypePurpose(public_key->keyType())));
+
+        public_key->checkKey();
+        return toPaserkSeal(BinaryView(public_key->data(), public_key->size()));
+    }
+
     void fromPaserkSeal(const std::string &paserk, const BinaryView &sk) override
     {
         loadPaserk<T, frompaserk>(this,
@@ -1076,6 +1146,27 @@ public:
             paserk, sk.data(), sk.size());
 
         _is_loaded = true;
+    }
+
+    void fromPaserkSeal(const std::string &paserk, Key * secret_key) override
+    {
+        if (secret_key == NULL)
+            throw UnexpectedException("unexpected: a secret_key must be provided");
+
+        // Only secret keys of the same version are allowed
+        // Although technically v2 and v4 are interchangeable
+        if (KeyTypeVersion(_key_type) != KeyTypeVersion(secret_key->keyType()))
+            throw UnexpectedException(
+                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
+                    KeyTypeVersion(secret_key->keyType()), KeyTypeVersion(_key_type)));
+        if (strcmp(KeyTypePurpose(secret_key->keyType()), "secret") != 0)
+            throw UnexpectedException(
+                fmt::format("unexpected: must be a secret key: actual:{}",
+                    KeyTypePurpose(secret_key->keyType())));
+
+        secret_key->checkKey();
+
+        fromPaserkSeal(paserk, BinaryView(secret_key->data(), secret_key->size()));
     }
 
     std::string toPaserkWrap(const BinaryView &wk) override
@@ -1414,16 +1505,15 @@ public:
         }
     }
 
-    static std::unique_ptr<Key> createFromBinary(KeyType type, const BinaryView &bv)
+    static std::unique_ptr<Key> loadFromBinary(KeyType type, const BinaryView &bv)
     {
         std::unique_ptr<Key> key = Keys::create(type);
         key->_data = Binary::fromBinary(bv, key->_required_length);
         key->_is_loaded = true;
         return key;
-
     }
 
-    static std::unique_ptr<Key> createFromHex(KeyType type, const std::string_view &s)
+    static std::unique_ptr<Key> loadFromHex(KeyType type, const std::string_view &s)
     {
         std::unique_ptr<Key> key = Keys::create(type);
         key->_data = Binary::fromHex(s, key->_required_length);
@@ -1431,7 +1521,7 @@ public:
         return key;
     }
 
-    static std::unique_ptr<Key> createFromBase64(KeyType type, const std::string_view &s)
+    static std::unique_ptr<Key> loadFromBase64(KeyType type, const std::string_view &s)
     {
         std::unique_ptr<Key> key = Keys::create(type);
         key->_data = Binary::fromBase64(s, key->_required_length);
@@ -1439,6 +1529,30 @@ public:
         return key;
     }
 
+    static std::unique_ptr<Key> loadFromPem(KeyType type, const std::string &s)
+    {
+        if (type == KeyType::V3_PUBLIC)
+        {
+            CryptoPP::StringSource source(s, true);
+            CryptoPP::DL_PublicKey_EC<CryptoPP::ECP> public_key;
+            CryptoPP::PEM_Load(source, public_key);
+            const CryptoPP::ECP::Point& q = public_key.GetPublicElement();
+            return loadFromHex(type,
+                        p384_publickey_to_hex(q.x, q.y.GetBit(0)));
+        }
+        else if (type == KeyType::V3_SECRET)
+        {
+            CryptoPP::StringSource source(s, true);
+            CryptoPP::DL_PrivateKey_EC<CryptoPP::ECP> secret_key;
+            CryptoPP::PEM_Load(source, secret_key);
+            return loadFromHex(type,
+                        p384_privatekey_to_hex(secret_key.GetPrivateExponent()));
+        }
+        else
+        {
+            throw UnsupportedException("unsupported");
+        }
+    }
 };
 
 template<KeyType kt, size_t public_size, size_t secret_size, auto fgenerate>
@@ -1455,8 +1569,8 @@ std::pair<std::unique_ptr<Key>, std::unique_ptr<Key>> generateKeyPair(const Bina
         throw UnexpectedException("y");
 
     return std::make_pair(
-                Keys::createFromBinary(KeyType::V4_PUBLIC, binPublic),
-                Keys::createFromBinary(KeyType::V4_SECRET, binSecret));
+                Keys::loadFromBinary(KeyType::V4_PUBLIC, binPublic),
+                Keys::loadFromBinary(KeyType::V4_SECRET, binSecret));
 }
 
 
@@ -1475,6 +1589,12 @@ public:
                     paseto_v2_PUBLIC_PUBLICKEYBYTES,
                     paseto_v2_PUBLIC_SECRETKEYBYTES,
                     paseto_v2_public_generate_keys>(seed);
+            case KeyType::V3_PUBLIC:
+                return generateKeyPair<
+                    KeyType::V3_PUBLIC,
+                    paseto_v3_PUBLIC_PUBLICKEYBYTES,
+                    paseto_v3_PUBLIC_SECRETKEYBYTES,
+                    paseto_v3_public_generate_keys>(seed);
             case KeyType::V4_PUBLIC:
                 return generateKeyPair<
                     KeyType::V4_PUBLIC,

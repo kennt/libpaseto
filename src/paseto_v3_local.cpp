@@ -688,14 +688,12 @@ uint8_t * paserk_v3_password_wrap(
         to_hash[0] = 0xFF;
         memcpy(to_hash + 1, prekey, sizeof(prekey));
         SHA384 sha;
-        sha.Update(to_hash, sizeof(to_hash));
-        sha.Final(digest);
+        sha.CalculateDigest(digest, to_hash, sizeof(to_hash));
         memcpy(Ek, digest, sizeof(Ek));
 
         to_hash[0] = 0xFE;
         sha.Restart();
-        sha.Update(to_hash, sizeof(to_hash));
-        sha.Final(digest);
+        sha.CalculateDigest(digest, to_hash, sizeof(to_hash));
         memcpy(Ak, digest, sizeof(Ak));
     }
 
@@ -829,8 +827,7 @@ uint8_t * paserk_v3_password_unwrap(
         memcpy(to_hash + 1, prekey, sizeof(prekey));
 
         SHA384 sha;
-        sha.Update(to_hash, sizeof(to_hash));
-        sha.Final(digest);
+        sha.CalculateDigest(digest, to_hash, sizeof(to_hash));
 
         memcpy(Ak, digest, sizeof(Ak));
     }
@@ -879,8 +876,7 @@ uint8_t * paserk_v3_password_unwrap(
         memcpy(to_hash+1, prekey, sizeof(prekey));
 
         SHA384 sha;
-        sha.Update(to_hash, sizeof(to_hash));
-        sha.Final(digest);
+        sha.CalculateDigest(digest, to_hash, sizeof(to_hash));
 
         memcpy(Ek, digest, sizeof(Ek));
         sodium_memzero(digest, sizeof(digest));
@@ -952,21 +948,14 @@ char * paseto_v3_local_key_to_paserk(
         memcpy(to_encode, paserk_lid, paserk_lid_len);
         memcpy(to_encode+paserk_lid_len, paserk_key, to_encode_len - paserk_lid_len);
 
+        uint8_t digest[48];
         SHA384 sha;
-        uint8_t *digest = (uint8_t *) malloc(sha.DigestSize());
-        if (!digest) {
-            free(paserk_key);
-            errno = ENOMEM;
-            return NULL;
-        }
-        sha.Update(to_encode, to_encode_len);
-        sha.Final(digest);
+        sha.CalculateDigest(digest, to_encode, to_encode_len);
 
         // assert that sha.DigestSize() > 33
         uint8_t hash[33];
         memcpy(hash, digest, 33);
 
-        free(digest);
         free(to_encode);
         free(paserk_key);
 
@@ -975,9 +964,6 @@ char * paseto_v3_local_key_to_paserk(
     }
     else if (strncmp(paserk_id, paserk_seal, paserk_seal_len) == 0)
     {
-        // #1. Generate random ephemeral P-384 keypair (esk, epk)
-        uint8_t esk[P384_SECRETKEYBYTES];
-        uint8_t epk[P384_COMPRESSED_PUBLICKEYBYTES];
         uint8_t pk[P384_COMPRESSED_PUBLICKEYBYTES];
 
         if (secret_len != P384_COMPRESSED_PUBLICKEYBYTES)
@@ -991,9 +977,13 @@ char * paseto_v3_local_key_to_paserk(
         }
         memcpy(pk, secret, secret_len);
 
+        // #1. Generate random ephemeral P-384 keypair (esk, epk)
+        uint8_t esk[P384_SECRETKEYBYTES];
+        uint8_t epk[P384_COMPRESSED_PUBLICKEYBYTES];
         {
             AutoSeededRandomPool rng;
             ECDH<ECP>::Domain ecdh(CryptoPP::ASN1::secp384r1());
+
             SecByteBlock priv(ecdh.PrivateKeyLength());
             SecByteBlock pub(ecdh.PublicKeyLength());
 
@@ -1026,22 +1016,48 @@ char * paseto_v3_local_key_to_paserk(
         }
 
         // #2. Calculate shared secret xk
-        uint8_t xk[crypto_scalarmult_BYTES];
-        crypto_scalarmult(xk, esk, pk);
+        uint8_t xk[48];
+
+        {
+            ECDH<ECP>::Domain dh( CryptoPP::ASN1::secp384r1() );
+            dh.AccessGroupParameters().SetPointCompression(true);
+
+            SecByteBlock privkey(esk, sizeof(esk));
+            SecByteBlock pubkey(pk, sizeof(pk));
+
+            SecByteBlock shared(dh.AgreedValueLength());
+            if (!dh.Agree(shared, privkey, pubkey))
+            {
+                fprintf(stderr, "could not determine ECDH shared secret\n");
+                errno = EINVAL;
+                return NULL;
+            }
+            if (shared.SizeInBytes() != sizeof(xk))
+            {
+                fprintf(stderr, "ECDH shared key size not as expected: actual:%zu  expected:%zu",
+                    shared.SizeInBytes(), sizeof(xk));
+                errno = EINVAL;
+                return NULL;
+            }
+            memcpy(xk, shared.BytePtr(), sizeof(xk));
+        }
 
         // #3. Calculate encryption key Ek and nonce
         // #4. Calculate the auth key (Ak)
         uint8_t Ek[32];
         uint8_t nonce[16];
         uint8_t Ak[48];
-        uint8_t buffer[1 + paserk_seal_len + sizeof(xk) + sizeof(epk) + sizeof(pk)];
+        uint8_t buffer[1 + paserk_seal_len + sizeof(xk) + sizeof(epk) + 2*sizeof(pk)];
 
         {
+            char pkhex[2*sizeof(pk)+1];
+            key_save_hex(pkhex, sizeof(pkhex), pk, sizeof(pk));
+
             buffer[0] = 0x01;
             memcpy(buffer + 1, paserk_seal, paserk_seal_len);
             memcpy(buffer + 1 + paserk_seal_len, xk, sizeof(xk));
             memcpy(buffer + 1 + paserk_seal_len + sizeof(xk), epk, sizeof(epk));
-            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + sizeof(epk), pk, sizeof(pk));
+            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + sizeof(epk), pkhex, 2*sizeof(pk));
 
             uint8_t digest[48];
             SHA384 sha;
@@ -1225,19 +1241,47 @@ bool paseto_v3_local_key_from_paserk(
         }
 
         // #2. Calculate shared secret xk
-        uint8_t xk[crypto_scalarmult_BYTES];
-        crypto_scalarmult(xk, sk, epk);
+        uint8_t xk[48];
+
+        {
+            ECDH<ECP>::Domain dh( CryptoPP::ASN1::secp384r1() );
+            dh.AccessGroupParameters().SetPointCompression(true);
+
+            SecByteBlock privkey(sk, secret_len);
+            SecByteBlock pubkey(epk, epk_len);
+
+            SecByteBlock shared(dh.AgreedValueLength());
+            if (!dh.Agree(shared, privkey, pubkey))
+            {
+                fprintf(stderr, "could not determine ECDH shared secret\n");
+                free(paserk_data);
+                errno = EINVAL;
+                return false;
+            }
+            if (shared.SizeInBytes() != sizeof(xk))
+            {
+                fprintf(stderr, "ECDH shared key size not as expected: actual:%zu  expected:%zu",
+                    shared.SizeInBytes(), sizeof(xk));
+                free(paserk_data);
+                errno = EINVAL;
+                return false;
+            }
+            memcpy(xk, shared.BytePtr(), sizeof(xk));
+        }
 
         // #3. Calculate the authentication key (Ak)
         uint8_t Ak[48];
-        uint8_t buffer[1 + paserk_seal_len + sizeof(xk) + epk_len + sizeof(pk)];
+        uint8_t buffer[1 + paserk_seal_len + sizeof(xk) + epk_len + 2*sizeof(pk)];
 
         {
+            char pkhex[2*sizeof(pk)+1];
+            key_save_hex(pkhex, sizeof(pkhex), pk, sizeof(pk));
+
             buffer[0] = 0x02;
             memcpy(buffer + 1, paserk_seal, paserk_seal_len);
             memcpy(buffer + 1 + paserk_seal_len, xk, sizeof(xk));
             memcpy(buffer + 1 + paserk_seal_len + sizeof(xk), epk, epk_len);
-            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + epk_len, pk, sizeof(pk));
+            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + epk_len, pkhex, 2*sizeof(pk));
 
             SHA384 sha;
             sha.CalculateDigest(Ak, buffer, sizeof(buffer));
@@ -1269,13 +1313,9 @@ bool paseto_v3_local_key_from_paserk(
         {
             uint8_t digest[48];
             buffer[0] = 0x01;
-            memcpy(buffer + 1, paserk_seal, paserk_seal_len);
-            memcpy(buffer + 1 + paserk_seal_len, xk, sizeof(xk));
-            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk), epk, epk_len);
-            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + epk_len, pk, sizeof(pk));
 
             SHA384 sha;
-            sha.CalculateDigest(Ak, digest, sizeof(digest));
+            sha.CalculateDigest(digest, buffer, sizeof(buffer));
 
             memcpy(Ek, digest, sizeof(Ek));
             memcpy(nonce, digest + sizeof(Ek), sizeof(nonce));
@@ -1306,7 +1346,7 @@ bool paseto_v3_local_key_from_paserk(
 
         // #8. Return the plaintext
         free(paserk_data);
-        memcpy(key, pdk, sizeof(pdk));
+        memcpy(key, pdk, pdk_len);
         return true;
     }
     else if (strncmp(paserk_key, paserk_local_wrap, paserk_local_wrap_len) == 0)

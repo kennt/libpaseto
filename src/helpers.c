@@ -51,6 +51,15 @@ bool key_load_hex(uint8_t *key, size_t key_len, const char *key_hex) {
 }
 
 
+bool key_save_hex(char *key_hex, size_t key_hex_len, const uint8_t *key, size_t key_len)
+{
+    if (key_hex_len < (2*key_len + 1))
+        return false;
+    sodium_bin2hex(key_hex, key_hex_len, key, key_len);
+    return true;
+}
+
+
 bool key_load_base64(uint8_t *key, size_t key_len, const char *key_base64) {
     if (!key || !key_base64) {
         errno = EINVAL;

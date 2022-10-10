@@ -362,7 +362,7 @@ char * paseto_v4_secret_key_to_paserk(
     else if (strncmp(paserk_id, paserk_sid, paserk_sid_len) == 0)
     {
         char * paserk_key = paseto_v4_secret_key_to_paserk(key, paserk_secret, NULL, 0, NULL);
-        size_t to_encode_len = paserk_pid_len + strlen(paserk_key);
+        size_t to_encode_len = paserk_sid_len + strlen(paserk_key);
         uint8_t * to_encode = (uint8_t *)malloc(to_encode_len + 1);
         if (!to_encode) {
             free(paserk_key);

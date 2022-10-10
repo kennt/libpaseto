@@ -120,10 +120,10 @@ void run_test_vector(const string pathToFile,
                     ia_bytes = paseto::Binary::fromString(implicit_assertion);
                 bool test_ok = true;
 
-                auto seckey = paseto::Keys::createFromHex(
+                auto seckey = paseto::Keys::loadFromHex(
                         public_encode_keytype, ssecret_key);
 
-                auto pubkey = paseto::Keys::createFromHex(
+                auto pubkey = paseto::Keys::loadFromHex(
                         public_decode_keytype, spublic_key);
 
                 try
@@ -195,7 +195,7 @@ void run_test_vector(const string pathToFile,
                     }
 
                     unique_ptr<paseto::Key> key =
-                            paseto::Keys::createFromHex(local_encode_keytype, skey);
+                            paseto::Keys::loadFromHex(local_encode_keytype, skey);
 
                     if (nonce.length() == 2 * getNonceLength(local_encode_keytype))
                     {
@@ -242,7 +242,7 @@ void run_test_vector(const string pathToFile,
                         payload_bytes = paseto::Binary::fromString(payload);
                     }
 
-                    auto key = paseto::Keys::createFromHex(
+                    auto key = paseto::Keys::loadFromHex(
                          local_decode_keytype, skey);
 
                     paseto::Token token;

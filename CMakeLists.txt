@@ -27,7 +27,7 @@ function(append value)
 endfunction()
 
 if (WITH_ASAN STREQUAL "1")
-    append("-O1 -g" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+    append("-Og -g" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
     append("-fsanitize=address" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
     append("-fsanitize-address-use-after-scope" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
     append("-fno-omit-frame-pointer" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
@@ -77,8 +77,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(cryptopp)
 
 
-include_directories(include)
+include_directories(include cryptopp_pem)
 set(PASETO_SOURCES
+	cryptopp_pem/pem.h
+	cryptopp_pem/pem_common.cpp
+	cryptopp_pem/pem_common.h
+	cryptopp_pem/pem_read.cpp
+	cryptopp_pem/pem_write.cpp
 	src/paseto_v2_local.c
 	src/paseto_v2_public.c
 	src/paseto_v3_local.cpp
@@ -89,7 +94,9 @@ set(PASETO_SOURCES
 	src/helpers.c
 	src/helpers.h
 	src/helpers.cpp
-	src/helpers.hpp
+	include/helpers.hpp
+	include/paseto.hpp
+	include/paserk.h
 	include/paseto.h)
 
 configure_file("paseto.pc.in" "paseto.pc" @ONLY)
@@ -107,6 +114,7 @@ install(FILES
 	include/paseto.h
 	include/paseto.hpp
 	include/paserk.h
+	include/helpers.hpp
 	DESTINATION include)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/paseto.pc"
 	DESTINATION lib/pkgconfig)

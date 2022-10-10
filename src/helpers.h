@@ -28,14 +28,9 @@ void pre_auth_append(struct pre_auth *pa, const uint8_t *data, size_t data_len);
 bool key_load_hex(uint8_t *key, size_t key_len, const char *key_hex);
 bool key_load_base64(uint8_t *key, size_t key_len, const char *key_base64);
 
-
-size_t key_calculate_pem_size(const uint8_t *key, size_t key_len);
-bool key_to_pem(bool is_public_key,
-        const uint8_t *key, size_t key_len,
-        uint8_t *output, size_t output_len);
-bool key_from_pem(bool is_public_key,
-        const uint8_t *key, size_t key_len,
-        uint8_t *pem, size_t pem_ken);
+// key_hex should include space for null-terminating character
+// so key_hex_len >= 2*key_len + 1
+bool key_save_hex(char *key_hex, size_t key_hex_len, const uint8_t *key, size_t key_len);
 
 char * encode_output(size_t *dest_len,
                      const uint8_t *header, size_t header_len,
@@ -63,17 +58,6 @@ char *format_paserk_key(const char *header, size_t header_len,
 #define BASE64_TO_BIN_MAXLEN(b64_len) (b64_len / 4 * 3)
 
 void _dump_hex(const char * title, const uint8_t *buffer, size_t buffer_len);
-
-
-uint8_t * paserk_v2_seal_encrypt(size_t *output_len,
-    const char * header, size_t header_len,
-    const uint8_t *pubkey, size_t pubkey_len,
-    const uint8_t *keydata, size_t keydata_len);
-
-uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
-    const char * header, size_t header_len,
-    const uint8_t *seckey, size_t seckey_len,
-    const uint8_t *data, size_t data_len);
 
 
 #define READ32LE(S)                                                    \

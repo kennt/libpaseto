@@ -406,21 +406,13 @@ char * paseto_v3_public_key_to_paserk(
         memcpy(to_encode, paserk_pid, paserk_pid_len);
         memcpy(to_encode+paserk_pid_len, paserk_key, to_encode_len - paserk_pid_len);
 
+        uint8_t digest[48];
         SHA384 sha;
-        uint8_t *digest = (uint8_t *) malloc(sha.DigestSize());
-        if (!digest) {
-            free(paserk_key);
-            errno = ENOMEM;
-            return NULL;
-        }
-        sha.Update(to_encode, to_encode_len);
-        sha.Final(digest);
-
-        // assert that sha.DigestSize() > 33
+        sha.CalculateDigest(digest, to_encode, to_encode_len);
 
         uint8_t hash[33];
         memcpy(hash, digest, 33);
-        free(digest);
+
         free(to_encode);
         free(paserk_key);
 
@@ -493,19 +485,13 @@ char * paseto_v3_secret_key_to_paserk(
         memcpy(to_encode, paserk_sid, paserk_sid_len);
         memcpy(to_encode+paserk_sid_len, paserk_key, to_encode_len - paserk_sid_len);
 
+        uint8_t digest[48];
         SHA384 sha;
-        uint8_t *digest = (uint8_t *) malloc(sha.DigestSize());
-        if (!digest) {
-            free(paserk_key);
-            errno = ENOMEM;
-            return NULL;
-        }
-        sha.Update(to_encode, to_encode_len);
-        sha.Final(digest);
+        sha.CalculateDigest(digest, to_encode, to_encode_len);
 
         uint8_t hash[33];
         memcpy(hash, digest, 33);
-        free(digest);
+
         free(to_encode);
         free(paserk_key);
 

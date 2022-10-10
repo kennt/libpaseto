@@ -133,7 +133,7 @@ uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
     const uint8_t *data, size_t data_len);
 
 /* this function is also used by v4 */
-uint8_t * paserk_v2_seal_encrypt(size_t *output_len,
+uint8_t * paserk_v2_seal(size_t *output_len,
     const char * header, size_t header_len,
     const uint8_t *pubkey, size_t pubkey_len,
     const uint8_t *data, size_t data_len);

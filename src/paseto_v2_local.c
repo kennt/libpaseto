@@ -290,7 +290,7 @@ paseto_static_assert(
         "KEYBYTES mismatch");
 
 
-uint8_t * paserk_v2_seal_encrypt(size_t *output_len,
+uint8_t * paserk_v2_seal(size_t *output_len,
     const char * header, size_t header_len,
     const uint8_t *pubkey, size_t pubkey_len,
     const uint8_t *keydata, size_t keydata_len)
@@ -946,7 +946,7 @@ char * paseto_v2_local_key_to_paserk(
     else if (strncmp(paserk_id, paserk_seal, paserk_seal_len) == 0)
     {
         size_t encoded_len = 0;
-        uint8_t * encoded = paserk_v2_seal_encrypt(&encoded_len,
+        uint8_t * encoded = paserk_v2_seal(&encoded_len,
             paserk_seal, paserk_seal_len,
             secret, secret_len,
             key, paseto_v2_LOCAL_KEYBYTES);
