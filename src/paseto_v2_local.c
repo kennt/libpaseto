@@ -295,6 +295,11 @@ uint8_t * paserk_v2_seal(size_t *output_len,
     const uint8_t *pubkey, size_t pubkey_len,
     const uint8_t *keydata, size_t keydata_len)
 {
+    if (!pubkey || !keydata) {
+        errno = EINVAL;
+        return NULL;
+    }
+
     // v2 and v4 keylengths are the same
     if (keydata_len != paseto_v2_LOCAL_KEYBYTES)
     {
@@ -409,6 +414,11 @@ uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
     const uint8_t *seckey, size_t seckey_len,
     const uint8_t *data, size_t data_len)
 {
+    if (!seckey || !data) {
+        errno = EINVAL;
+        return NULL;
+    }
+
     if (data_len != (32 + crypto_sign_PUBLICKEYBYTES + paseto_v2_LOCAL_KEYBYTES))
     {
         fprintf(stderr, "seal encrypted data incorrect length: actual:%zu  expected:%d\n",
@@ -416,6 +426,7 @@ uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
         errno = EINVAL;
         return NULL;
     }
+
     // Break the data into parts
     size_t tag_len = 32;
     size_t epk_len = crypto_sign_PUBLICKEYBYTES;
@@ -521,6 +532,11 @@ uint8_t * paserk_v2_wrap(
     const uint8_t *wrapkey, size_t wrapkey_len,
     const uint8_t *data, size_t data_len)
 {
+    if (!wrapkey || !data) {
+        errno = EINVAL;
+        return NULL;
+    }
+
     // #1. Enforce algorithm lucidity
     // #2. Generate a randam nonce
     uint8_t nonce[32];
@@ -602,9 +618,22 @@ uint8_t * paserk_v2_unwrap(
     const uint8_t *wrapkey, size_t wrapkey_len,
     const uint8_t *data, size_t data_len)
 {
+    if (!wrapkey || !data) {
+        errno = EINVAL;
+        return NULL;
+    }
+
     // #1. Decode base64, break apart into tag, nonce, and cipherkey
     uint8_t tag[32];
     uint8_t nonce[32];
+
+    if (data_len <= (sizeof(tag) + sizeof(nonce)))
+    {
+        fprintf(stderr, "encrypted data too short: actual:%zu <= expected:%zu\n",
+            data_len, sizeof(tag) + sizeof(nonce));
+        errno = EINVAL;
+        return NULL;
+    }
 
     size_t ciphertext_len = data_len - sizeof(tag) - sizeof(nonce);
     uint8_t * ciphertext = (uint8_t *) malloc(ciphertext_len);
@@ -693,10 +722,11 @@ uint8_t * paserk_v2_password_wrap(
     const uint8_t *data, size_t data_len,
     v2PasswordParams *params)
 {
-    if (params == NULL) {
+    if (!params || !password || !data) {
         errno = EINVAL;
         return NULL;
     }
+
     // #1. Generate a random 16-byte salt (s)
     uint8_t salt[16];
     randombytes_buf(salt, sizeof(salt));
@@ -800,6 +830,12 @@ uint8_t * paserk_v2_password_unwrap(
     const uint8_t *password, size_t password_len,
     const uint8_t *data, size_t data_len)
 {
+    if (!password || !data)
+    {
+        errno = EINVAL;
+        return NULL;
+    }
+
     v2PasswordParams params;
     size_t salt_len = 16;
     size_t nonce_len = 24;
@@ -814,6 +850,14 @@ uint8_t * paserk_v2_password_unwrap(
     const uint8_t * nonce = current;
     current += nonce_len;
     const uint8_t * ciphertext = current;
+
+    if (data_len <= (salt_len + sizeof(uint64_t) + 2*sizeof(uint32_t) + nonce_len))
+    {
+        fprintf(stderr, "encrypted data too short: actual:%zu <= expected:%zu\n",
+            data_len, salt_len + sizeof(uint64_t) + 2*sizeof(uint32_t) + nonce_len);
+        errno = EINVAL;
+        return NULL;
+    }
 
     size_t ciphertext_len = data_len - (current - data) - tag_len;
     current += ciphertext_len;

@@ -445,6 +445,12 @@ uint8_t * paserk_v3_wrap(
     const uint8_t *wrapkey, size_t wrapkey_len,
     const uint8_t *data, size_t data_len)
 {
+    if (!wrapkey || !data)
+    {
+        errno = EINVAL;
+        return NULL;
+    }
+
     // #1. Enforce algorithm lucidity
     // #2. Generate a randam nonce
     uint8_t nonce[32];
@@ -544,9 +550,23 @@ uint8_t * paserk_v3_unwrap(
     const uint8_t *wrapkey, size_t wrapkey_len,
     const uint8_t *data, size_t data_len)
 {
+    if (!wrapkey || !data)
+    {
+        errno = EINVAL;
+        return NULL;
+    }
+
     // #1. Decode base64, break apart into tag, nonce, and cipherkey
     uint8_t tag[48];
     uint8_t nonce[32];
+
+    if (data_len <= (sizeof(tag) + sizeof(nonce)))
+    {
+        fprintf(stderr, "encrypted data too short: actual:%zu <= expected:%zu\n",
+            data_len,  sizeof(tag) + sizeof(nonce));
+        errno = EINVAL;
+        return NULL;
+    }
 
     size_t ciphertext_len = data_len - sizeof(tag) - sizeof(nonce);
     uint8_t * ciphertext = (uint8_t *) malloc(ciphertext_len);
@@ -658,7 +678,7 @@ uint8_t * paserk_v3_password_wrap(
     const uint8_t *data, size_t data_len,
     v3PasswordParams *params)
 {
-    if (params == NULL) {
+    if (!password || !data || !params) {
         errno = EINVAL;
         return NULL;
     }
@@ -778,6 +798,12 @@ uint8_t * paserk_v3_password_unwrap(
     const uint8_t *password, size_t password_len,
     const uint8_t *data, size_t data_len)
 {
+    if (!password || !data)
+    {
+        errno = EINVAL;
+        return NULL;
+    }
+
     size_t salt_len = 32;
     size_t nonce_len = 16;
     size_t tag_len = 48;
@@ -786,6 +812,14 @@ uint8_t * paserk_v3_password_unwrap(
                         - sizeof(uint32_t)
                         - nonce_len
                         - tag_len;
+
+    if (data_len <= (salt_len + sizeof(uint32_t) + nonce_len + tag_len))
+    {
+        fprintf(stderr, "encrypted data too short: actual:%zu <= expected:%zu\n",
+            data_len,  salt_len + sizeof(uint32_t) + nonce_len + tag_len);
+        errno = EINVAL;
+        return NULL;
+    }
 
     const uint8_t * salt;
     uint32_t iterations;
@@ -1199,6 +1233,16 @@ bool paseto_v3_local_key_from_paserk(
         const uint8_t * sk = secret;
         size_t tag_len = 48;
         size_t epk_len = P384_COMPRESSED_PUBLICKEYBYTES;
+
+        if (paserk_data_len <= (tag_len + epk_len))
+        {
+            fprintf(stderr, "encrypted data too short: actual:%zu <= expected:%zu\n",
+                paserk_data_len, tag_len + epk_len);
+            free(paserk_data);
+            errno = EINVAL;
+            return false;
+        }
+
         size_t edk_len = paserk_data_len - epk_len - tag_len;
         uint8_t * tag = paserk_data;
         uint8_t * epk = paserk_data + tag_len;
