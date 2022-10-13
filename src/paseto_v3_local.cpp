@@ -158,6 +158,9 @@ char *paseto_v3_local_encrypt(
 
         hkdf.DeriveKey(auth_key, sizeof(auth_key), key, paseto_v3_LOCAL_KEYBYTES,
             NULL, 0, nonce_info_auth, sizeof(nonce_info_auth));
+
+        sodium_memzero(derived, sizeof(derived));
+        sodium_memzero(nonce_info_auth, sizeof(nonce_info_auth));
     }
     
     /* #5. Encrypt message using AES-256-CTR */
@@ -175,6 +178,10 @@ char *paseto_v3_local_encrypt(
         if (ciphertext_len != message_len)
         {
             fprintf(stderr, "ciphertext length is not the same as plaintext length");
+            sodium_memzero(enc_key, sizeof(enc_key));
+            sodium_memzero(counter_nonce, sizeof(counter_nonce));
+            sodium_memzero(auth_key, sizeof(auth_key));
+            sodium_memzero(to_encode, to_encode_len);
             free(to_encode);
             errno = EINVAL;
             return NULL;
@@ -194,7 +201,10 @@ char *paseto_v3_local_encrypt(
                 ciphertext_len +
                 footer_len +
                 implicit_assertion_len)) {
-            free(ciphertext);
+            sodium_memzero(enc_key, sizeof(enc_key));
+            sodium_memzero(counter_nonce, sizeof(counter_nonce));
+            sodium_memzero(auth_key, sizeof(auth_key));
+            sodium_memzero(to_encode, to_encode_len);
             free(to_encode);
             errno = ENOMEM;
             return NULL;
@@ -225,6 +235,9 @@ char *paseto_v3_local_encrypt(
                        footer, footer_len);
     if (output == NULL)
     {
+        sodium_memzero(enc_key, sizeof(enc_key));
+        sodium_memzero(counter_nonce, sizeof(counter_nonce));
+        sodium_memzero(auth_key, sizeof(auth_key));
         sodium_memzero(to_encode, to_encode_len);
         free(to_encode);
         errno = EINVAL;
@@ -234,6 +247,9 @@ char *paseto_v3_local_encrypt(
     sodium_memzero(to_encode, to_encode_len);
     free(to_encode);
 
+    sodium_memzero(enc_key, sizeof(enc_key));
+    sodium_memzero(counter_nonce, sizeof(counter_nonce));
+    sodium_memzero(auth_key, sizeof(auth_key));
     return output;
 }
 
@@ -282,10 +298,10 @@ uint8_t *paseto_v3_local_decrypt(
     uint8_t *ciphertext;
     size_t ciphertext_len;
     uint8_t *digest;
+    size_t body_len = 0;
 
     {
         uint8_t *body = NULL;
-        size_t body_len = 0;
 
         decoded = decode_input(
                      encoded, encoded_len,
@@ -333,6 +349,9 @@ uint8_t *paseto_v3_local_decrypt(
 
         hkdf.DeriveKey(auth_key, sizeof(auth_key), key, paseto_v3_LOCAL_KEYBYTES,
             NULL, 0, nonce_info_auth, sizeof(nonce_info_auth));
+
+        sodium_memzero(derived, sizeof(derived));
+        sodium_memzero(nonce_info_auth, sizeof(nonce_info_auth));
     }
 
     /* #6. Pack h,n,c,f, and i using PAE */
@@ -347,6 +366,11 @@ uint8_t *paseto_v3_local_decrypt(
                 decoded_footer_len +
                 implicit_assertion_len))
         {
+            sodium_memzero(enc_key, sizeof(enc_key));
+            sodium_memzero(counter_nonce, sizeof(counter_nonce));
+            sodium_memzero(auth_key, sizeof(auth_key));
+            sodium_memzero(decoded_footer, decoded_footer_len);
+            sodium_memzero(decoded, body_len);
             free(decoded_footer);
             free(decoded);
             errno = ENOMEM;
@@ -367,15 +391,24 @@ uint8_t *paseto_v3_local_decrypt(
         hmac.Update(pa.base, pre_auth_len);
         hmac.Final(digest2);
 
+        sodium_memzero(pa.base, pre_auth_len);
         free(pa.base);
 
         if (sodium_memcmp(digest, digest2, mac_len) != 0)
         {
             std::cerr << "digest failed " << __LINE__ << std::endl;
+            sodium_memzero(enc_key, sizeof(enc_key));
+            sodium_memzero(counter_nonce, sizeof(counter_nonce));
+            sodium_memzero(auth_key, sizeof(auth_key));
+            sodium_memzero(digest2, sizeof(digest2));
+            sodium_memzero(decoded_footer, decoded_footer_len);
+            sodium_memzero(decoded, body_len);
             free(decoded_footer);
             free(decoded);
+            errno = EINVAL;
             return NULL;
         }
+        sodium_memzero(digest2, sizeof(digest2));
     }
 
     /* #9. Decrypt message using AES-256-CTR */
@@ -393,6 +426,11 @@ uint8_t *paseto_v3_local_decrypt(
         if (plaintext_len != ciphertext_len)
         {
             fprintf(stderr, "ciphertext length is not the same as plaintext length");
+            sodium_memzero(enc_key, sizeof(enc_key));
+            sodium_memzero(counter_nonce, sizeof(counter_nonce));
+            sodium_memzero(auth_key, sizeof(auth_key));
+            sodium_memzero(decoded_footer, decoded_footer_len);
+            sodium_memzero(decoded, body_len);
             free(decoded_footer);
             free(decoded);
             errno = EINVAL;
@@ -401,6 +439,11 @@ uint8_t *paseto_v3_local_decrypt(
         plaintext = (uint8_t *) malloc(plaintext_len+1);
         if (plaintext == NULL)
         {
+            sodium_memzero(enc_key, sizeof(enc_key));
+            sodium_memzero(counter_nonce, sizeof(counter_nonce));
+            sodium_memzero(auth_key, sizeof(auth_key));
+            sodium_memzero(decoded_footer, decoded_footer_len);
+            sodium_memzero(decoded, body_len);
             free(decoded_footer);
             free(decoded);
             errno = ENOMEM;
@@ -415,15 +458,22 @@ uint8_t *paseto_v3_local_decrypt(
     if (footer)
         *footer = decoded_footer;
     else
+    {
+        sodium_memzero(decoded_footer, decoded_footer_len);
         free(decoded_footer);
+    }
 
     if (footer_len)
         *footer_len = decoded_footer_len;
 
+    sodium_memzero(decoded, body_len);
     free(decoded);
 
     *message_len = plaintext_len;
 
+    sodium_memzero(enc_key, sizeof(enc_key));
+    sodium_memzero(counter_nonce, sizeof(counter_nonce));
+    sodium_memzero(auth_key, sizeof(auth_key));
     return plaintext;
 }
 
@@ -471,6 +521,9 @@ uint8_t * paserk_v3_wrap(
 
         memcpy(Ek, digest, sizeof(Ek));
         memcpy(nonce2, digest+sizeof(Ek), sizeof(nonce2));
+
+        sodium_memzero(digest, sizeof(digest));
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #4. Derive authentication key (Ak)
@@ -485,6 +538,9 @@ uint8_t * paserk_v3_wrap(
         hmac.Final(digest);
 
         memcpy(Ak, digest, sizeof(Ak));
+
+        sodium_memzero(digest, sizeof(digest));
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #5. Encrypt plaintext key (data) as ciphertext
@@ -492,6 +548,10 @@ uint8_t * paserk_v3_wrap(
     uint8_t * ciphertext = (uint8_t *) malloc(ciphertext_len);
     if (!ciphertext)
     {
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(nonce2, sizeof(nonce2));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(Ak, sizeof(Ak));
         errno = ENOMEM;
         return NULL;
     }
@@ -507,6 +567,11 @@ uint8_t * paserk_v3_wrap(
         {
             fprintf(stderr, "wrap: ciphertext length(%zu) is not the same as plaintext length (%zu)",
                 encryptor.MaxRetrievable(), data_len);
+            sodium_memzero(nonce, sizeof(nonce));
+            sodium_memzero(nonce2, sizeof(nonce2));
+            sodium_memzero(Ek, sizeof(Ek));
+            sodium_memzero(Ak, sizeof(Ak));
+            sodium_memzero(ciphertext, ciphertext_len);
             free(ciphertext);
             errno = EINVAL;
             return NULL;
@@ -524,12 +589,20 @@ uint8_t * paserk_v3_wrap(
         HMAC<SHA384> hmac(Ak, sizeof(Ak));
         hmac.Update(to_hash, sizeof(to_hash));
         hmac.Final(tag);
+
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #7. Return tag || nonce || ciphertext
     size_t out_len = sizeof(tag) + sizeof(nonce) + ciphertext_len;
     uint8_t * out = (uint8_t *) malloc(out_len);
     if (!out) {
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(nonce2, sizeof(nonce2));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(tag, sizeof(tag));
+        sodium_memzero(ciphertext, ciphertext_len);
         free(ciphertext);
         errno = ENOMEM;
         return NULL;
@@ -538,9 +611,17 @@ uint8_t * paserk_v3_wrap(
     memcpy(out + sizeof(tag), nonce, sizeof(nonce));
     memcpy(out + sizeof(tag) + sizeof(nonce), ciphertext, ciphertext_len);
 
+    sodium_memzero(ciphertext, ciphertext_len);
     free(ciphertext);
+
     if (output_len)
         *output_len = out_len;
+
+    sodium_memzero(nonce, sizeof(nonce));
+    sodium_memzero(nonce2, sizeof(nonce2));
+    sodium_memzero(Ek, sizeof(Ek));
+    sodium_memzero(Ak, sizeof(Ak));
+    sodium_memzero(tag, sizeof(tag));
     return out;
 }
 
@@ -591,6 +672,9 @@ uint8_t * paserk_v3_unwrap(
         hmac.Final(digest);
 
         memcpy(Ak, digest, sizeof(Ak));
+
+        sodium_memzero(digest, sizeof(digest));
+        sodium_memzero(to_hash, sizeof(to_hash));;
     }
 
     // #3. Recalculate auth tag
@@ -604,15 +688,23 @@ uint8_t * paserk_v3_unwrap(
         HMAC<SHA384> hmac(Ak, sizeof(Ak));
         hmac.Update(to_hash, sizeof(to_hash));
         hmac.Final(tag2);
+
+        sodium_memzero(to_hash, sizeof(to_hash));;
     }
 
     // #4. Compare tags
     if (sodium_memcmp(tag, tag2, sizeof(tag)) != 0)
     {
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(tag2, sizeof(tag2));
+        sodium_memzero(tag, sizeof(tag));
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(ciphertext, ciphertext_len);
         free(ciphertext);
         errno = EINVAL;
         return NULL;
     }
+    sodium_memzero(tag2, sizeof(tag2));
 
     // #5. Derive encryption key and nonce3
     uint8_t Ek[32];
@@ -628,6 +720,9 @@ uint8_t * paserk_v3_unwrap(
 
         memcpy(Ek, digest, sizeof(Ek));
         memcpy(nonce2, digest+sizeof(Ek), sizeof(nonce2));
+
+        sodium_memzero(digest, sizeof(digest));
+        sodium_memzero(to_hash, sizeof(to_hash));;
     }
 
     // #6. Decrypt cipherkey
@@ -644,6 +739,12 @@ uint8_t * paserk_v3_unwrap(
         if (plaintext_len != ciphertext_len)
         {
             fprintf(stderr, "ciphertext length is not the same as plaintext length");
+            sodium_memzero(Ek, sizeof(Ek));
+            sodium_memzero(nonce2, sizeof(nonce2));
+            sodium_memzero(Ak, sizeof(Ak));
+            sodium_memzero(tag, sizeof(tag));
+            sodium_memzero(nonce, sizeof(nonce));
+            sodium_memzero(ciphertext, ciphertext_len);
             free(ciphertext);
             errno = EINVAL;
             return NULL;
@@ -651,6 +752,12 @@ uint8_t * paserk_v3_unwrap(
         plaintext = (uint8_t *) malloc(plaintext_len+1);
         if (plaintext == NULL)
         {
+            sodium_memzero(Ek, sizeof(Ek));
+            sodium_memzero(nonce2, sizeof(nonce2));
+            sodium_memzero(Ak, sizeof(Ak));
+            sodium_memzero(tag, sizeof(tag));
+            sodium_memzero(nonce, sizeof(nonce));
+            sodium_memzero(ciphertext, ciphertext_len);
             free(ciphertext);
             errno = ENOMEM;
             return NULL;
@@ -661,12 +768,19 @@ uint8_t * paserk_v3_unwrap(
         plaintext[plaintext_len] = '\0';
     }
 
+    sodium_memzero(ciphertext, ciphertext_len);
     free(ciphertext);
 
     // #7. Algorithm lucidity
     // #8. Return plaintext
     if (output_len)
         *output_len = plaintext_len;
+
+    sodium_memzero(Ek, sizeof(Ek));
+    sodium_memzero(nonce2, sizeof(nonce2));
+    sodium_memzero(Ak, sizeof(Ak));
+    sodium_memzero(tag, sizeof(tag));
+    sodium_memzero(nonce, sizeof(nonce));
     return plaintext;
 }
 
@@ -715,6 +829,9 @@ uint8_t * paserk_v3_password_wrap(
         sha.Restart();
         sha.CalculateDigest(digest, to_hash, sizeof(to_hash));
         memcpy(Ak, digest, sizeof(Ak));
+
+        sodium_memzero(digest, sizeof(digest));
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #5. Generate random 16-byte nonce (n)
@@ -734,11 +851,21 @@ uint8_t * paserk_v3_password_wrap(
         if (encryptor.MaxRetrievable() != data_len)
         {
             fprintf(stderr, "ciphertext length is not the same as plaintext length");
+            sodium_memzero(salt, sizeof(salt));
+            sodium_memzero(prekey, sizeof(prekey));
+            sodium_memzero(Ek, sizeof(Ek));
+            sodium_memzero(Ak, sizeof(Ak));
+            sodium_memzero(nonce, sizeof(nonce));
             errno = EINVAL;
             return NULL;
         }
         edk = (uint8_t *) malloc(edk_len);
         if (!edk) {
+            sodium_memzero(salt, sizeof(salt));
+            sodium_memzero(prekey, sizeof(prekey));
+            sodium_memzero(Ek, sizeof(Ek));
+            sodium_memzero(Ak, sizeof(Ak));
+            sodium_memzero(nonce, sizeof(nonce));
             errno = ENOMEM;
             return NULL;
         }
@@ -754,6 +881,12 @@ uint8_t * paserk_v3_password_wrap(
                         + 48;                   // sizeof(tag)
     uint8_t * buffer = (uint8_t *) malloc(buffer_len);
     if (!buffer) {
+        sodium_memzero(salt, sizeof(salt));
+        sodium_memzero(prekey, sizeof(prekey));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(edk, edk_len);
         free(edk);
         errno = ENOMEM;
         return NULL;
@@ -780,6 +913,7 @@ uint8_t * paserk_v3_password_wrap(
         hmac.Update(buffer, current - buffer);
         hmac.Final(current);
     }
+    sodium_memzero(edk, edk_len);
     free(edk);
 
     // #8. Return the result
@@ -788,6 +922,12 @@ uint8_t * paserk_v3_password_wrap(
 
     if (output_len)
         *output_len = buffer_len - header_len;
+
+    sodium_memzero(salt, sizeof(salt));
+    sodium_memzero(prekey, sizeof(prekey));
+    sodium_memzero(Ek, sizeof(Ek));
+    sodium_memzero(Ak, sizeof(Ak));
+    sodium_memzero(nonce, sizeof(nonce));
     return buffer;
 }
 
@@ -864,6 +1004,9 @@ uint8_t * paserk_v3_password_unwrap(
         sha.CalculateDigest(digest, to_hash, sizeof(to_hash));
 
         memcpy(Ak, digest, sizeof(Ak));
+
+        sodium_memzero(digest, sizeof(digest));
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #4. Recalculate the auth tag
@@ -873,6 +1016,8 @@ uint8_t * paserk_v3_password_unwrap(
                                 + nonce_len + edk_len;
         uint8_t * to_hash = (uint8_t *) malloc(to_hash_len);
         if (!to_hash) {
+            sodium_memzero(Ak, sizeof(Ak));
+            sodium_memzero(prekey, sizeof(prekey));
             errno = ENOMEM;
             return NULL;
         }
@@ -891,15 +1036,20 @@ uint8_t * paserk_v3_password_unwrap(
         hmac.Update(to_hash, to_hash_len);
         hmac.Final(tag2);
 
+        sodium_memzero(to_hash, to_hash_len);
         free(to_hash);
     }
 
     // #5. Compare tags
     if (sodium_memcmp(tag, tag2, sizeof(tag2)) != 0)
     {
+        sodium_memzero(tag2, sizeof(tag2));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(prekey, sizeof(prekey));
         errno = EINVAL;
         return NULL;
     }
+    sodium_memzero(tag2, sizeof(tag2));
 
     // #6. Derive encryption key
     uint8_t Ek[32];
@@ -913,7 +1063,9 @@ uint8_t * paserk_v3_password_unwrap(
         sha.CalculateDigest(digest, to_hash, sizeof(to_hash));
 
         memcpy(Ek, digest, sizeof(Ek));
+
         sodium_memzero(digest, sizeof(digest));
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #7. Decrypt encrypted key (edk)
@@ -930,12 +1082,18 @@ uint8_t * paserk_v3_password_unwrap(
         if (plaintext_len != edk_len)
         {
             fprintf(stderr, "ciphertext length is not the same as plaintext length");
+            sodium_memzero(Ek, sizeof(Ek));
+            sodium_memzero(Ak, sizeof(Ak));
+            sodium_memzero(prekey, sizeof(prekey));
             errno = EINVAL;
             return NULL;
         }
         plaintext = (uint8_t *) malloc(plaintext_len+1);
         if (plaintext == NULL)
         {
+            sodium_memzero(Ek, sizeof(Ek));
+            sodium_memzero(Ak, sizeof(Ak));
+            sodium_memzero(prekey, sizeof(prekey));
             errno = ENOMEM;
             return NULL;
         }
@@ -948,6 +1106,10 @@ uint8_t * paserk_v3_password_unwrap(
     // #8. Return plaintext
     if (output_len)
         *output_len = plaintext_len;
+
+    sodium_memzero(Ek, sizeof(Ek));
+    sodium_memzero(Ak, sizeof(Ak));
+    sodium_memzero(prekey, sizeof(prekey));
     return plaintext;
 }
 
@@ -1026,6 +1188,7 @@ char * paseto_v3_local_key_to_paserk(
             {
                 fprintf(stderr, "Unexpected private key length: actual:%u expected:%d\n",
                     ecdh.PrivateKeyLength(), P384_SECRETKEYBYTES);
+                sodium_memzero(pk, sizeof(pk));
                 errno = EINVAL;
                 return NULL;
             }
@@ -1035,6 +1198,7 @@ char * paseto_v3_local_key_to_paserk(
                 fprintf(stderr, "Unexpected ECDH public key length: actual:%u expected:%d\n",
                     ecdh.PublicKeyLength(),
                     (P384_SECRETKEYBYTES + P384_COMPRESSED_PUBLICKEYBYTES));
+                sodium_memzero(pk, sizeof(pk));
                 errno = EINVAL;
                 return NULL;
             }
@@ -1063,6 +1227,9 @@ char * paseto_v3_local_key_to_paserk(
             if (!dh.Agree(shared, privkey, pubkey))
             {
                 fprintf(stderr, "could not determine ECDH shared secret\n");
+                sodium_memzero(pk, sizeof(pk));
+                sodium_memzero(esk, sizeof(esk));
+                sodium_memzero(epk, sizeof(epk));
                 errno = EINVAL;
                 return NULL;
             }
@@ -1070,6 +1237,9 @@ char * paseto_v3_local_key_to_paserk(
             {
                 fprintf(stderr, "ECDH shared key size not as expected: actual:%zu  expected:%zu",
                     shared.SizeInBytes(), sizeof(xk));
+                sodium_memzero(pk, sizeof(pk));
+                sodium_memzero(esk, sizeof(esk));
+                sodium_memzero(epk, sizeof(epk));
                 errno = EINVAL;
                 return NULL;
             }
@@ -1081,17 +1251,14 @@ char * paseto_v3_local_key_to_paserk(
         uint8_t Ek[32];
         uint8_t nonce[16];
         uint8_t Ak[48];
-        uint8_t buffer[1 + paserk_seal_len + sizeof(xk) + sizeof(epk) + 2*sizeof(pk)];
 
         {
-            char pkhex[2*sizeof(pk)+1];
-            key_save_hex(pkhex, sizeof(pkhex), pk, sizeof(pk));
-
+            uint8_t buffer[1 + paserk_seal_len + sizeof(xk) + sizeof(epk) + sizeof(pk)];
             buffer[0] = 0x01;
             memcpy(buffer + 1, paserk_seal, paserk_seal_len);
             memcpy(buffer + 1 + paserk_seal_len, xk, sizeof(xk));
             memcpy(buffer + 1 + paserk_seal_len + sizeof(xk), epk, sizeof(epk));
-            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + sizeof(epk), pkhex, 2*sizeof(pk));
+            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + sizeof(epk), pk, sizeof(pk));
 
             uint8_t digest[48];
             SHA384 sha;
@@ -1103,6 +1270,9 @@ char * paseto_v3_local_key_to_paserk(
             buffer[0] = 0x02;
             sha.Restart();
             sha.CalculateDigest(Ak, buffer, sizeof(buffer));
+
+            sodium_memzero(buffer, sizeof(buffer));
+            sodium_memzero(digest, sizeof(digest));
         }
 
         // #5. Encrypt plaintext datakey (pdk)
@@ -1118,6 +1288,13 @@ char * paseto_v3_local_key_to_paserk(
             if (encryptor.MaxRetrievable() != paseto_v3_LOCAL_KEYBYTES)
             {
                 fprintf(stderr, "ciphertext length is not the same as plaintext length");
+                sodium_memzero(pk, sizeof(pk));
+                sodium_memzero(esk, sizeof(esk));
+                sodium_memzero(epk, sizeof(epk));
+                sodium_memzero(xk, sizeof(xk));
+                sodium_memzero(Ek, sizeof(Ek));
+                sodium_memzero(nonce, sizeof(nonce));
+                sodium_memzero(Ak, sizeof(Ak));
                 errno = EINVAL;
                 return NULL;
             }
@@ -1135,6 +1312,8 @@ char * paseto_v3_local_key_to_paserk(
             HMAC<SHA384> hmac(Ak, sizeof(Ak));
             hmac.Update(message, sizeof(message));
             hmac.Final(tag);
+
+            sodium_memzero(message, sizeof(message));
         }
 
         // #7. Return h || base64(tag || epk || edk)
@@ -1143,8 +1322,19 @@ char * paseto_v3_local_key_to_paserk(
         memcpy(output + sizeof(tag), epk, sizeof(epk));
         memcpy(output + sizeof(tag) + sizeof(epk), edk, sizeof(edk));
 
-        return format_paserk_key(paserk_seal, paserk_seal_len,
+        sodium_memzero(pk, sizeof(pk));
+        sodium_memzero(esk, sizeof(esk));
+        sodium_memzero(epk, sizeof(epk));
+        sodium_memzero(xk, sizeof(xk));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(edk, sizeof(edk));
+        sodium_memzero(tag, sizeof(tag));
+        char * result = format_paserk_key(paserk_seal, paserk_seal_len,
                                  output, sizeof(output));
+        sodium_memzero(output, sizeof(output));
+        return result;
     }
     else if (strncmp(paserk_id, paserk_local_wrap, paserk_local_wrap_len) == 0)
     {
@@ -1224,6 +1414,7 @@ bool paseto_v3_local_key_from_paserk(
                 NULL, &paserk_data_len, NULL,
                 sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0)
         {
+            sodium_memzero(paserk_data, paserk_data_len);
             free(paserk_data);
             return false;
         }
@@ -1238,6 +1429,7 @@ bool paseto_v3_local_key_from_paserk(
         {
             fprintf(stderr, "encrypted data too short: actual:%zu <= expected:%zu\n",
                 paserk_data_len, tag_len + epk_len);
+            sodium_memzero(paserk_data, paserk_data_len);
             free(paserk_data);
             errno = EINVAL;
             return false;
@@ -1250,6 +1442,7 @@ bool paseto_v3_local_key_from_paserk(
 
         if (edk_len != paseto_v3_LOCAL_KEYBYTES)
         {
+            sodium_memzero(paserk_data, paserk_data_len);
             free(paserk_data);
             errno = EINVAL;
             return false;
@@ -1270,6 +1463,7 @@ bool paseto_v3_local_key_from_paserk(
             if (!secret_key.Validate(prng, 3))
             {
                 fprintf(stderr, "secret key validate() failed (%d)\n", __LINE__);
+                sodium_memzero(paserk_data, paserk_data_len);
                 free(paserk_data);
                 errno = EINVAL;
                 return false;
@@ -1282,6 +1476,8 @@ bool paseto_v3_local_key_from_paserk(
             std::string pubkey_hex;
             pubkey_hex = p384_publickey_to_hex(public_key);
             key_load_hex(pk, sizeof(pk), pubkey_hex.c_str());
+
+            sodium_memzero(pubkey_hex.data(), pubkey_hex.length());
         }
 
         // #2. Calculate shared secret xk
@@ -1298,6 +1494,8 @@ bool paseto_v3_local_key_from_paserk(
             if (!dh.Agree(shared, privkey, pubkey))
             {
                 fprintf(stderr, "could not determine ECDH shared secret\n");
+                sodium_memzero(pk, sizeof(pk));
+                sodium_memzero(paserk_data, paserk_data_len);
                 free(paserk_data);
                 errno = EINVAL;
                 return false;
@@ -1306,6 +1504,8 @@ bool paseto_v3_local_key_from_paserk(
             {
                 fprintf(stderr, "ECDH shared key size not as expected: actual:%zu  expected:%zu",
                     shared.SizeInBytes(), sizeof(xk));
+                sodium_memzero(pk, sizeof(pk));
+                sodium_memzero(paserk_data, paserk_data_len);
                 free(paserk_data);
                 errno = EINVAL;
                 return false;
@@ -1315,17 +1515,14 @@ bool paseto_v3_local_key_from_paserk(
 
         // #3. Calculate the authentication key (Ak)
         uint8_t Ak[48];
-        uint8_t buffer[1 + paserk_seal_len + sizeof(xk) + epk_len + 2*sizeof(pk)];
+        uint8_t buffer[1 + paserk_seal_len + sizeof(xk) + epk_len + sizeof(pk)];
 
         {
-            char pkhex[2*sizeof(pk)+1];
-            key_save_hex(pkhex, sizeof(pkhex), pk, sizeof(pk));
-
             buffer[0] = 0x02;
             memcpy(buffer + 1, paserk_seal, paserk_seal_len);
             memcpy(buffer + 1 + paserk_seal_len, xk, sizeof(xk));
             memcpy(buffer + 1 + paserk_seal_len + sizeof(xk), epk, epk_len);
-            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + epk_len, pkhex, 2*sizeof(pk));
+            memcpy(buffer + 1 + paserk_seal_len + sizeof(xk) + epk_len, pk, sizeof(pk));
 
             SHA384 sha;
             sha.CalculateDigest(Ak, buffer, sizeof(buffer));
@@ -1341,15 +1538,24 @@ bool paseto_v3_local_key_from_paserk(
             HMAC<SHA384> hmac(Ak, sizeof(Ak));
             hmac.Update(message, sizeof(message));
             hmac.Final(tag2);
+
+            sodium_memzero(message, sizeof(message));
         }
 
         // #5. Compare tags
         if (sodium_memcmp(tag, tag2, sizeof(tag2)) != 0)
         {
+            sodium_memzero(tag2, sizeof(tag2));
+            sodium_memzero(buffer, sizeof(buffer));
+            sodium_memzero(Ak, sizeof(Ak));
+            sodium_memzero(xk, sizeof(xk));
+            sodium_memzero(pk, sizeof(pk));
+            sodium_memzero(paserk_data, paserk_data_len);
             free(paserk_data);
             errno = EINVAL;
             return false;
         }
+        sodium_memzero(tag2, sizeof(tag2));
 
         // #6. Calculate the encryption key (Ek)
         uint8_t Ek[32];
@@ -1363,6 +1569,8 @@ bool paseto_v3_local_key_from_paserk(
 
             memcpy(Ek, digest, sizeof(Ek));
             memcpy(nonce, digest + sizeof(Ek), sizeof(nonce));
+
+            sodium_memzero(digest, sizeof(digest));
         }
 
         // #7. Decrypt
@@ -1380,6 +1588,13 @@ bool paseto_v3_local_key_from_paserk(
             {
                 fprintf(stderr, "unexpected key length: actual:%zu expected:%u\n",
                     plaintext_len, paseto_v3_LOCAL_KEYBYTES);
+                sodium_memzero(Ek, sizeof(Ek));
+                sodium_memzero(nonce, sizeof(nonce));
+                sodium_memzero(buffer, sizeof(buffer));
+                sodium_memzero(Ak, sizeof(Ak));
+                sodium_memzero(xk, sizeof(xk));
+                sodium_memzero(pk, sizeof(pk));
+                sodium_memzero(paserk_data, paserk_data_len);
                 free(paserk_data);
                 errno = EINVAL;
                 return false;
@@ -1389,8 +1604,16 @@ bool paseto_v3_local_key_from_paserk(
         }
 
         // #8. Return the plaintext
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(buffer, sizeof(buffer));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(xk, sizeof(xk));
+        sodium_memzero(pk, sizeof(pk));
+        sodium_memzero(paserk_data, paserk_data_len);
         free(paserk_data);
         memcpy(key, pdk, pdk_len);
+        sodium_memzero(pdk, pdk_len);
         return true;
     }
     else if (strncmp(paserk_key, paserk_local_wrap, paserk_local_wrap_len) == 0)

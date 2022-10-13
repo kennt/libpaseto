@@ -127,7 +127,7 @@ bool paseto_v2_secret_key_from_paserk(
     const char * paserk_key, size_t paserk_key_len,
     const uint8_t * secret, size_t secret_len);
 
-uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
+uint8_t * paserk_v2_unseal(size_t *output_len,
     const char * header, size_t header_len,
     const uint8_t *seckey, size_t seckey_len,
     const uint8_t *data, size_t data_len);

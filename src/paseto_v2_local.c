@@ -49,6 +49,8 @@ void default_generate_nonce(
         crypto_generichash_blake2b_update(&state, footer, footer_len);
     }
     crypto_generichash_blake2b_final(&state, nonce, paseto_v2_LOCAL_NONCEBYTES);
+
+    sodium_memzero(nonce_key, sizeof(nonce_key));
 }
 
 
@@ -80,6 +82,7 @@ char *paseto_v2_local_encrypt(
     struct pre_auth pa;
     if (!pre_auth_init(&pa, 3,
             header_len + paseto_v2_LOCAL_NONCEBYTES + footer_len)) {
+        sodium_memzero(to_encode, to_encode_len);
         free(to_encode);
         errno = ENOMEM;
         return NULL;
@@ -96,6 +99,7 @@ char *paseto_v2_local_encrypt(
             pa.base, pre_auth_len,
             NULL, nonce, key);
 
+    sodium_memzero(pa.base, pre_auth_len);
     free(pa.base);
 
     size_t encoded_len = BIN_TO_BASE64_MAXLEN(to_encode_len) - 1; // minus included trailing NULL byte
@@ -106,6 +110,7 @@ char *paseto_v2_local_encrypt(
     char *output_current = output;
     size_t output_len_remaining = output_len;
     if (!output) {
+        sodium_memzero(to_encode, to_encode_len);
         free(to_encode);
         errno = ENOMEM;
         return NULL;
@@ -121,6 +126,7 @@ char *paseto_v2_local_encrypt(
     output_current += encoded_len;
     output_len_remaining -= encoded_len;
 
+    sodium_memzero(to_encode, to_encode_len);
     free(to_encode);
 
     if (footer) {
@@ -136,10 +142,10 @@ char *paseto_v2_local_encrypt(
 }
 
 uint8_t *paseto_v2_local_decrypt(
-        const char *encoded, size_t *message_len,
+        const char *encoded, size_t *output_len,
         const uint8_t key[paseto_v2_LOCAL_KEYBYTES],
         uint8_t **footer, size_t *footer_len) {
-    if (!encoded || !message_len || !key) {
+    if (!encoded || !output_len || !key) {
         errno = EINVAL;
         return NULL;
     }
@@ -168,6 +174,7 @@ uint8_t *paseto_v2_local_decrypt(
             NULL, &decoded_len,
             &encoded_footer,
             sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
+        sodium_memzero(decoded, encoded_len);
         free(decoded);
         errno = EINVAL;
         return NULL;
@@ -177,6 +184,7 @@ uint8_t *paseto_v2_local_decrypt(
     // after base64 decoding there should be at least enough data to store the
     // nonce as well as the signature
     if (encoded_len < paseto_v2_LOCAL_NONCEBYTES + mac_len) {
+        sodium_memzero(decoded, encoded_len);
         free(decoded);
         errno = EINVAL;
         return NULL;
@@ -201,6 +209,7 @@ uint8_t *paseto_v2_local_decrypt(
                 NULL, &decoded_footer_len,
                 NULL,
                 sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
+            sodium_memzero(decoded, encoded_len);
             free(decoded);
             errno = EINVAL;
             return NULL;
@@ -210,6 +219,7 @@ uint8_t *paseto_v2_local_decrypt(
     struct pre_auth pa;
     if (!pre_auth_init(&pa, 3,
             header_len + paseto_v2_LOCAL_NONCEBYTES + decoded_footer_len)) {
+        sodium_memzero(decoded, encoded_len);
         free(decoded);
         errno = ENOMEM;
         return NULL;
@@ -220,8 +230,11 @@ uint8_t *paseto_v2_local_decrypt(
     const size_t pre_auth_len = pa.current - pa.base;
 
 
-    uint8_t *message = malloc(decoded_len - mac_len + 1);
+    size_t message_len = decoded_len - mac_len + 1;
+    uint8_t *message = (uint8_t *) malloc(message_len);
     if (!message) {
+        sodium_memzero(decoded, encoded_len);
+        sodium_memzero(pa.base, pre_auth_len);
         free(decoded);
         free(pa.base);
         errno = ENOMEM;
@@ -236,6 +249,9 @@ uint8_t *paseto_v2_local_decrypt(
             ct, ct_len,
             pa.base, pre_auth_len,
             nonce, key) != 0) {
+        sodium_memzero(message, message_len);
+        sodium_memzero(decoded, encoded_len);
+        sodium_memzero(pa.base, pre_auth_len);
         free(decoded);
         free(pa.base);
         free(message);
@@ -246,11 +262,14 @@ uint8_t *paseto_v2_local_decrypt(
     // include a null terminator for convenience
     message[internal_message_len] = '\0';
 
+    sodium_memzero(pa.base, pre_auth_len);
     free(pa.base);
 
     if (decoded_footer && footer && footer_len) {
         uint8_t *internal_footer = malloc(decoded_footer_len + 1);
         if (!internal_footer) {
+            sodium_memzero(decoded, encoded_len);
+            sodium_memzero(message, message_len);
             free(decoded);
             free(message);
             errno = ENOMEM;
@@ -265,9 +284,10 @@ uint8_t *paseto_v2_local_decrypt(
         if (footer_len) *footer_len = 0;
     }
 
+    sodium_memzero(decoded, encoded_len);
     free(decoded);
 
-    *message_len = internal_message_len;
+    *output_len = internal_message_len;
 
     return message;
 }
@@ -336,12 +356,20 @@ uint8_t * paserk_v2_seal(size_t *output_len,
     uint8_t xk[crypto_scalarmult_BYTES];
     crypto_scalarmult(xk, esk, xpk);
 
+    sodium_memzero(esk, sizeof(esk));
+    sodium_memzero(t_skpk, sizeof(t_skpk));
+    sodium_memzero(t_pk, sizeof(t_pk));
+
+
     // #4. Calculate the encryption key Ek
     size_t encode_len = 1 + header_len +
                         sizeof(xk) + sizeof(epk) + sizeof(xpk);
     uint8_t * encode_buffer = (uint8_t *) malloc(encode_len);
     if (!encode_buffer) {
         errno = ENOMEM;
+        sodium_memzero(xpk, sizeof(xpk));
+        sodium_memzero(epk, sizeof(epk));
+        sodium_memzero(xk, sizeof(xk));
         return NULL;
     }
 
@@ -367,6 +395,7 @@ uint8_t * paserk_v2_seal(size_t *output_len,
         sizeof(epk) + sizeof(xpk),
         NULL, 0);
 
+    sodium_memzero(encode_buffer, encode_len);
     free(encode_buffer);
 
     // #7. Encrypt pdk, result is edk (encrypted data key)
@@ -379,14 +408,16 @@ uint8_t * paserk_v2_seal(size_t *output_len,
 
     // #8. Calculate the auth tag
     uint8_t tag[32];
-    if (sizeof(tag) < header_len)
-    {
-        errno = ENOMEM;
-        return NULL;
-    }
     size_t new_output_len = sizeof(tag) + sizeof(epk) + edk_len;
     uint8_t * output = (uint8_t *) malloc(new_output_len);
     if (!output) {
+        sodium_memzero(xpk, sizeof(xpk));
+        sodium_memzero(epk, sizeof(epk));
+        sodium_memzero(xk, sizeof(xk));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(edk, sizeof(edk));
         errno = ENOMEM;
         return NULL;
     }
@@ -405,11 +436,20 @@ uint8_t * paserk_v2_seal(size_t *output_len,
 
     if (output_len)
         *output_len = new_output_len;
+
+    sodium_memzero(xpk, sizeof(xpk));
+    sodium_memzero(epk, sizeof(epk));
+    sodium_memzero(xk, sizeof(xk));
+    sodium_memzero(Ek, sizeof(Ek));
+    sodium_memzero(Ak, sizeof(Ak));
+    sodium_memzero(nonce, sizeof(nonce));
+    sodium_memzero(edk, sizeof(edk));
+    sodium_memzero(tag, sizeof(tag));
     return output;
 }
 
 
-uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
+uint8_t * paserk_v2_unseal(size_t *output_len,
     const char * header, size_t header_len,
     const uint8_t *seckey, size_t seckey_len,
     const uint8_t *data, size_t data_len)
@@ -452,12 +492,17 @@ uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
     uint8_t xk[crypto_scalarmult_BYTES];
     crypto_scalarmult(xk, xsk, epk);
 
+    sodium_memzero(xsk, sizeof(xsk));
+    sodium_memzero(pk, sizeof(pk));
+
     // #4. Calculate authentication key
     uint8_t Ak[32];
     size_t encode_len = 1 + header_len +
                         sizeof(xk) + epk_len + sizeof(xpk);
     uint8_t * encode_buffer = (uint8_t *) malloc(encode_len);
     if (!encode_buffer) {
+        sodium_memzero(xpk, sizeof(xpk));
+        sodium_memzero(xk, sizeof(xk));
         errno = ENOMEM;
         return NULL;
     }
@@ -475,7 +520,11 @@ uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
     size_t auth_buffer_len = header_len + epk_len + edk_len;
     uint8_t * auth_buffer = (uint8_t *) malloc(auth_buffer_len);
     if (!auth_buffer) {
+        sodium_memzero(encode_buffer, encode_len);
         free(encode_buffer);
+        sodium_memzero(xpk, sizeof(xpk));
+        sodium_memzero(xk, sizeof(xk));
+        sodium_memzero(Ak, sizeof(Ak));
         errno = ENOMEM;
         return NULL;
     }
@@ -489,10 +538,16 @@ uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
     // #6. Compare tag and tag2.  Reject if different
     if (sodium_memcmp(tag, tag2, sizeof(tag2)) != 0)
     {
+        sodium_memzero(encode_buffer, encode_len);
         free(encode_buffer);
+        sodium_memzero(xpk, sizeof(xpk));
+        sodium_memzero(xk, sizeof(xk));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(tag2, sizeof(tag2));
         errno = EINVAL;
         return NULL;
     }
+    sodium_memzero(tag2, sizeof(tag2));
 
     // #7. Calculate the encryption key (Ek)
     uint8_t Ek[32];
@@ -507,11 +562,17 @@ uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
     crypto_generichash(nonce, sizeof(nonce),
         encode_buffer, epk_len + sizeof(xpk),
         NULL, 0);
+    sodium_memzero(encode_buffer, encode_len);
     free(encode_buffer);
 
     // #9. Decrypt edk with Ek and nonce
     uint8_t * output = (uint8_t *) malloc(edk_len);
     if (!output) {
+        sodium_memzero(xpk, sizeof(xpk));
+        sodium_memzero(xk, sizeof(xk));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(nonce, sizeof(nonce));
         errno = ENOMEM;
         return NULL;
     }
@@ -523,6 +584,12 @@ uint8_t * paserk_v2_seal_decrypt(size_t *output_len,
     // 10. Return the plaintext data key (pdk)
     if (output_len)
         *output_len = edk_len;
+
+    sodium_memzero(xpk, sizeof(xpk));
+    sodium_memzero(xk, sizeof(xk));
+    sodium_memzero(Ak, sizeof(Ak));
+    sodium_memzero(Ek, sizeof(Ek));
+    sodium_memzero(nonce, sizeof(nonce));
     return output;
 }
 
@@ -556,6 +623,9 @@ uint8_t * paserk_v2_wrap(
 
         memcpy(Ek, digest, sizeof(Ek));
         memcpy(nonce2, digest+sizeof(Ek), sizeof(nonce2));
+
+        sodium_memzero(digest, sizeof(digest));
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #4. Derive authentication key (Ak)
@@ -567,6 +637,7 @@ uint8_t * paserk_v2_wrap(
         crypto_generichash(Ak, sizeof(Ak),
             to_hash, sizeof(to_hash),
             wrapkey, wrapkey_len);
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #5. Encrypt plaintext key (data) as ciphertext
@@ -574,6 +645,10 @@ uint8_t * paserk_v2_wrap(
     uint8_t * ciphertext = (uint8_t *) malloc(ciphertext_len);
     if (!ciphertext)
     {
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(nonce2, sizeof(nonce2));
+        sodium_memzero(Ak, sizeof(Ak));
         errno = ENOMEM;
         return NULL;
     }
@@ -592,13 +667,20 @@ uint8_t * paserk_v2_wrap(
         crypto_generichash(tag, sizeof(tag),
             to_hash, sizeof(to_hash),
             Ak, sizeof(Ak));
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #7. Return tag || nonce || ciphertext
     size_t out_len = sizeof(tag) + sizeof(nonce) + ciphertext_len;
     uint8_t * out = (uint8_t *) malloc(out_len);
     if (!out) {
+        sodium_memzero(ciphertext, ciphertext_len);
         free(ciphertext);
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(nonce2, sizeof(nonce2));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(tag, sizeof(tag));
         errno = ENOMEM;
         return NULL;
     }
@@ -606,9 +688,16 @@ uint8_t * paserk_v2_wrap(
     memcpy(out + sizeof(tag), nonce, sizeof(nonce));
     memcpy(out + sizeof(tag) + sizeof(nonce), ciphertext, ciphertext_len);
 
+    sodium_memzero(ciphertext, ciphertext_len);
     free(ciphertext);
     if (output_len)
         *output_len = out_len;
+
+    sodium_memzero(nonce, sizeof(nonce));
+    sodium_memzero(Ek, sizeof(Ek));
+    sodium_memzero(nonce2, sizeof(nonce2));
+    sodium_memzero(Ak, sizeof(Ak));
+    sodium_memzero(tag, sizeof(tag));
     return out;
 }
 
@@ -654,6 +743,8 @@ uint8_t * paserk_v2_unwrap(
         crypto_generichash(Ak, sizeof(Ak),
             to_hash, sizeof(to_hash),
             wrapkey, wrapkey_len);
+
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #3. Recalculate auth tag
@@ -666,15 +757,23 @@ uint8_t * paserk_v2_unwrap(
         crypto_generichash(tag2, sizeof(tag2),
             to_hash, sizeof(to_hash),
             Ak, sizeof(Ak));
+
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #4. Compare tags
     if (sodium_memcmp(tag, tag2, sizeof(tag)) != 0)
     {
+        sodium_memzero(ciphertext, ciphertext_len);
         free(ciphertext);
+        sodium_memzero(tag, sizeof(tag));
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(tag2, sizeof(tag2));
         errno = EINVAL;
         return NULL;
     }
+    sodium_memzero(tag2, sizeof(tag2));
 
     // #5. Derive encryption key and nonce3
     uint8_t Ek[32];
@@ -690,6 +789,9 @@ uint8_t * paserk_v2_unwrap(
 
         memcpy(Ek, digest, sizeof(Ek));
         memcpy(nonce2, digest+sizeof(Ek), sizeof(nonce2));
+
+        sodium_memzero(digest, sizeof(digest));
+        sodium_memzero(to_hash, sizeof(to_hash));
     }
 
     // #6. Decrypt cipherkey
@@ -697,7 +799,13 @@ uint8_t * paserk_v2_unwrap(
     uint8_t * plaintext = (uint8_t *) malloc(plaintext_len);
     if (!plaintext)
     {
+        sodium_memzero(ciphertext, ciphertext_len);
         free(ciphertext);
+        sodium_memzero(tag, sizeof(tag));
+        sodium_memzero(nonce, sizeof(nonce));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(nonce2, sizeof(nonce2));
         errno = ENOMEM;
         return NULL;
     }
@@ -706,12 +814,19 @@ uint8_t * paserk_v2_unwrap(
         ciphertext, ciphertext_len,
         nonce2, Ek);
 
+    sodium_memzero(ciphertext, ciphertext_len);
     free(ciphertext);
 
     // #7. Algorithm lucidity
     // #8. Return plaintext
     if (output_len)
         *output_len = plaintext_len;
+
+    sodium_memzero(tag, sizeof(tag));
+    sodium_memzero(nonce, sizeof(nonce));
+    sodium_memzero(Ak, sizeof(Ak));
+    sodium_memzero(Ek, sizeof(Ek));
+    sodium_memzero(nonce2, sizeof(nonce2));
     return plaintext;
 }
 
@@ -739,6 +854,7 @@ uint8_t * paserk_v2_password_wrap(
             params->time, params->memory,
             crypto_pwhash_ALG_ARGON2ID13) != 0)
     {
+        sodium_memzero(salt, sizeof(salt));
         errno = EINVAL;
         return NULL;
     }
@@ -755,6 +871,8 @@ uint8_t * paserk_v2_password_wrap(
 
         buffer[0] = 0xFE;
         crypto_generichash(Ak, sizeof(Ak), buffer, sizeof(buffer), NULL, 0);
+
+        sodium_memzero(buffer, sizeof(buffer));
     }
 
     // #5. Generate random 24-byte nonce (n)
@@ -765,6 +883,11 @@ uint8_t * paserk_v2_password_wrap(
     size_t edk_len = data_len;
     uint8_t * edk = (uint8_t *) malloc(edk_len);
     if (!edk) {
+        sodium_memzero(salt, sizeof(salt));
+        sodium_memzero(k, sizeof(k));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(nonce, sizeof(nonce));
         errno = ENOMEM;
         return NULL;
     }
@@ -785,7 +908,13 @@ uint8_t * paserk_v2_password_wrap(
                         + 32;                   // sizeof(tag)
     uint8_t * buffer = (uint8_t *) malloc(buffer_len);
     if (!buffer) {
+        sodium_memzero(edk, edk_len);
         free(edk);
+        sodium_memzero(salt, sizeof(salt));
+        sodium_memzero(k, sizeof(k));
+        sodium_memzero(Ek, sizeof(Ek));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(nonce, sizeof(nonce));
         errno = ENOMEM;
         return NULL;
     }
@@ -813,6 +942,7 @@ uint8_t * paserk_v2_password_wrap(
                 buffer, current - buffer,
                 Ak, sizeof(Ak));
     }
+    sodium_memzero(edk, edk_len);
     free(edk);
 
     // Now move the buffer down (we do not want to return the header)
@@ -820,6 +950,12 @@ uint8_t * paserk_v2_password_wrap(
 
     if (output_len)
         *output_len = buffer_len - header_len;
+
+    sodium_memzero(salt, sizeof(salt));
+    sodium_memzero(k, sizeof(k));
+    sodium_memzero(Ek, sizeof(Ek));
+    sodium_memzero(Ak, sizeof(Ak));
+    sodium_memzero(nonce, sizeof(nonce));
     return buffer;
 }
 
@@ -896,6 +1032,8 @@ uint8_t * paserk_v2_password_unwrap(
         buffer[0] = 0xFE;
         memcpy(buffer + 1, prekey, sizeof(prekey));
         crypto_generichash(Ak, sizeof(Ak), buffer, sizeof(buffer), NULL, 0);
+
+        sodium_memzero(buffer, sizeof(buffer));
     }
 
     // #4. Recalculate the tag (t2)
@@ -904,20 +1042,28 @@ uint8_t * paserk_v2_password_unwrap(
         uint8_t * buffer = (uint8_t *) malloc(data_len + header_len - tag_len);
         if (!buffer) {
             errno = ENOMEM;
+            sodium_memzero(prekey, sizeof(prekey));
+            sodium_memzero(Ak, sizeof(Ak));
             return NULL;
         }
         memcpy(buffer, header, header_len);
         memcpy(buffer + header_len, data, data_len - tag_len);
         crypto_generichash(tag2, sizeof(tag2), buffer, header_len + data_len - tag_len, Ak, sizeof(Ak));
+
+        sodium_memzero(buffer, data_len + header_len - tag_len);        
         free(buffer);
     }
 
     // #5. Compare t2 with the oriinal tag
     if (sodium_memcmp(tag, tag2, sizeof(tag2)) != 0)
     {
+        sodium_memzero(prekey, sizeof(prekey));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(tag2, sizeof(tag2));
         errno = EINVAL;
         return NULL;
     }
+    sodium_memzero(tag2, sizeof(tag2));
 
     // #6. Derive the encryption key (Ek)
     uint8_t Ek[32];
@@ -926,12 +1072,17 @@ uint8_t * paserk_v2_password_unwrap(
         buffer[0] = 0xFF;
         memcpy(buffer + 1, prekey, sizeof(prekey));
         crypto_generichash(Ek, sizeof(Ek), buffer, sizeof(buffer), NULL, 0);
+
+        sodium_memzero(buffer, sizeof(buffer));
     }
 
     // #7. Decrypt the encrypted data key (edk)
     size_t plaintext_len = ciphertext_len;
     uint8_t * plaintext = (uint8_t *) malloc(plaintext_len);
     if (!plaintext) {
+        sodium_memzero(prekey, sizeof(prekey));
+        sodium_memzero(Ak, sizeof(Ak));
+        sodium_memzero(Ek, sizeof(Ek));
         errno = ENOMEM;
         return NULL;
     }
@@ -943,6 +1094,10 @@ uint8_t * paserk_v2_password_unwrap(
     // #8. Return the plaintext key (ptk)
     if (output_len)
         *output_len = plaintext_len;
+
+    sodium_memzero(prekey, sizeof(prekey));
+    sodium_memzero(Ak, sizeof(Ak));
+    sodium_memzero(Ek, sizeof(Ek));
     return plaintext;
 }
 
@@ -1070,7 +1225,7 @@ bool paseto_v2_local_key_from_paserk(
         }
 
         size_t output_len;
-        uint8_t * pdk = paserk_v2_seal_decrypt(&output_len,
+        uint8_t * pdk = paserk_v2_unseal(&output_len,
                         paserk_seal, paserk_seal_len,
                         secret, secret_len,
                         paserk_data, len);

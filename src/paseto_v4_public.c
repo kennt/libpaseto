@@ -99,6 +99,7 @@ char *paseto_v4_public_sign(
                     message_len +
                     footer_len +
                     implicit_assertion_len)) {
+            sodium_memzero(to_encode, to_encode_len);
             free(to_encode);
             errno = ENOMEM;
             return NULL;
@@ -114,11 +115,14 @@ char *paseto_v4_public_sign(
     if (crypto_sign_detached(to_encode + message_len, NULL,
                              pa.base, pre_auth_len, key))
     {
+        sodium_memzero(pa.base, pre_auth_len);
+        sodium_memzero(to_encode, to_encode_len);
         free(to_encode);
         errno = EINVAL;
         return NULL;
     }
 
+    sodium_memzero(pa.base, pre_auth_len);
     free(pa.base);
 
     /* #5. Encode */
@@ -128,11 +132,13 @@ char *paseto_v4_public_sign(
                        footer, footer_len);
     if (!output)
     {
+        sodium_memzero(to_encode, to_encode_len);
         free(to_encode);
         errno = EINVAL;
         return NULL;
     }
 
+    sodium_memzero(to_encode, to_encode_len);
     free(to_encode);
 
     return output;
@@ -178,10 +184,10 @@ uint8_t *paseto_v4_public_verify(
     uint8_t *message;
     size_t internal_message_len;
     uint8_t *signature;
+    size_t body_len = 0;
 
     {
         uint8_t *body = NULL;
-        size_t body_len = 0;
 
         decoded = decode_input(
                      encoded, encoded_len,
@@ -209,6 +215,8 @@ uint8_t *paseto_v4_public_verify(
                 internal_message_len +
                 decoded_footer_len +
                 implicit_assertion_len)) {
+            sodium_memzero(decoded, body_len);
+            sodium_memzero(decoded_footer, decoded_footer_len);
             free(decoded);
             free(decoded_footer);
             errno = ENOMEM;
@@ -224,19 +232,25 @@ uint8_t *paseto_v4_public_verify(
     /* #6. Use Ed25519 to verify the signature */
     if (crypto_sign_verify_detached(
             signature, pa.base, pre_auth_len, key) != 0) {
+        sodium_memzero(pa.base, pre_auth_len);
+        sodium_memzero(decoded, body_len);
+        sodium_memzero(decoded_footer, decoded_footer_len);
         free(decoded);
         free(decoded_footer);
         free(pa.base);
         errno = EINVAL;
         return NULL;
     }
+    sodium_memzero(pa.base, pre_auth_len);
+    free(pa.base);
 
     /* #7. If valid, return the message and footer */
     uint8_t *outmessage = malloc(internal_message_len + 1);
     if (!message) {
+        sodium_memzero(decoded, body_len);
+        sodium_memzero(decoded_footer, decoded_footer_len);
         free(decoded);
         free(decoded_footer);
-        free(pa.base);
         errno = ENOMEM;
         return NULL;
     }
@@ -244,13 +258,16 @@ uint8_t *paseto_v4_public_verify(
     memcpy(outmessage, decoded, internal_message_len);
     message[internal_message_len] = '\0';
 
-    free(pa.base);
+    sodium_memzero(decoded, body_len);
     free(decoded);
 
     if (footer)
         *footer = decoded_footer;
     else
+    {
+        sodium_memzero(decoded_footer, decoded_footer_len);
         free(decoded_footer);
+    }
 
     if (footer_len)
         *footer_len = decoded_footer_len;

@@ -171,9 +171,9 @@ add_custom_command(TARGET pasetojsontest POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E make_directory
 	$<TARGET_FILE_DIR:pasetotest>/test
 	COMMAND ${CMAKE_COMMAND} -E copy
-	${CMAKE_CURRENT_SOURCE_DIR}/test/v2.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/v3.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/v4.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/v2.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/v3.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/v4.json
 	$<TARGET_FILE_DIR:pasetotest>/test)
 
 add_executable(paserkjsontest
@@ -192,50 +192,50 @@ add_custom_command(TARGET paserkjsontest POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E make_directory
 	$<TARGET_FILE_DIR:pasetotest>/test/paserk
 	COMMAND ${CMAKE_COMMAND} -E copy
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.lid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.local-pw.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.local-wrap.pie.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.local.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.pid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.public.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.seal.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.secret-pw.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.secret-wrap.pie.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.secret.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k1.sid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.lid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.local-pw.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.local-wrap.pie.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.local.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.pid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.public.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.seal.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.secret-pw.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.secret-wrap.pie.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.secret.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k2.sid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.lid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.local-pw.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.local-wrap.pie.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.local.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.pid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.public.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.seal.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.secret-pw.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.secret-wrap.pie.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.secret.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k3.sid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.lid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.local-pw.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.local-wrap.pie.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.local.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.pid.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.public.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.seal.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.secret-pw.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.secret-wrap.pie.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.secret.json
-	${CMAKE_CURRENT_SOURCE_DIR}/test/paserk/k4.sid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.lid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.local-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.local-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.local.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.pid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.public.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.seal.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.secret-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.secret-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.secret.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k1.sid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.lid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.local-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.local-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.local.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.pid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.public.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.seal.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.secret-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.secret-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.secret.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k2.sid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.lid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.local-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.local-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.local.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.pid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.public.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.seal.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.secret-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.secret-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.secret.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k3.sid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.lid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.local-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.local-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.local.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.pid.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.public.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.seal.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.secret-pw.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.secret-wrap.pie.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.secret.json
+	${CMAKE_CURRENT_SOURCE_DIR}/test/test-vectors/PASERK/k4.sid.json
 	$<TARGET_FILE_DIR:pasetotest>/test/paserk)
 
 

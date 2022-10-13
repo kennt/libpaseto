@@ -115,6 +115,9 @@ char *paseto_v4_local_encrypt(
         crypto_generichash(auth_key, sizeof(auth_key),
             tmp_mess, info_auth_len + nonce_len,
             key, paseto_v4_LOCAL_KEYBYTES);
+
+        sodium_memzero(hashed, sizeof(hashed));
+        sodium_memzero(tmp_mess, sizeof(tmp_mess));
     }
 
     /* #5. Encrypt using XChaCha20 using enc_key and counter_nonce */
@@ -138,6 +141,10 @@ char *paseto_v4_local_encrypt(
                 ciphertext_len + 
                 footer_len +
                 implicit_assertion_len)) {
+            sodium_memzero(auth_key, sizeof(auth_key));
+            sodium_memzero(counter_nonce, sizeof(counter_nonce));
+            sodium_memzero(enc_key, sizeof(enc_key));
+            sodium_memzero(to_encode, to_encode_len);
             free(ciphertext);
             free(to_encode);
             errno = ENOMEM;
@@ -157,6 +164,7 @@ char *paseto_v4_local_encrypt(
         pa.base, pre_auth_len,
         auth_key, sizeof(auth_key));
 
+    sodium_memzero(pa.base, pre_auth_len);
     free(pa.base);
 
     memcpy(to_encode + nonce_len + ciphertext_len, pae_hash, mac_len);
@@ -166,15 +174,22 @@ char *paseto_v4_local_encrypt(
                        header, header_len,
                        to_encode, to_encode_len,
                        footer, footer_len);
+
+    sodium_memzero(to_encode, to_encode_len);
+    free(to_encode);
+    
     if (output == NULL)
     {
-        free(to_encode);
+        sodium_memzero(auth_key, sizeof(auth_key));
+        sodium_memzero(counter_nonce, sizeof(counter_nonce));
+        sodium_memzero(enc_key, sizeof(enc_key));
         errno = EINVAL;
         return NULL;
     }
 
-    free(to_encode);
-
+    sodium_memzero(auth_key, sizeof(auth_key));
+    sodium_memzero(counter_nonce, sizeof(counter_nonce));
+    sodium_memzero(enc_key, sizeof(enc_key));
     return output;
 }
 
@@ -221,10 +236,10 @@ uint8_t *paseto_v4_local_decrypt(
     uint8_t *ciphertext;
     size_t ciphertext_len;
     uint8_t *mac;
+    size_t body_len = 0;
 
     {
         uint8_t *body = NULL;
-        size_t body_len = 0;
 
         decoded = decode_input(
                      encoded, encoded_len,
@@ -248,6 +263,8 @@ uint8_t *paseto_v4_local_decrypt(
     // after base64 decoding there should be at least enough data to store the
     // nonce as well as the signature
     if (encoded_len < paseto_v4_LOCAL_NONCEBYTES + mac_len) {
+        sodium_memzero(decoded_footer, decoded_footer_len);
+        sodium_memzero(decoded, body_len);
         free(decoded_footer);
         free(decoded);
         errno = EINVAL;
@@ -276,6 +293,9 @@ uint8_t *paseto_v4_local_decrypt(
         crypto_generichash(auth_key, sizeof(auth_key),
             tmp_mess, info_auth_len + nonce_len,
             key, paseto_v4_LOCAL_KEYBYTES);
+
+        sodium_memzero(hashed, sizeof(hashed));
+        sodium_memzero(tmp_mess, sizeof(tmp_mess));
     }
 
     /* #6. Build pae */
@@ -287,6 +307,11 @@ uint8_t *paseto_v4_local_decrypt(
                 header_len + nonce_len +
                 ciphertext_len + decoded_footer_len +
                 implicit_assertion_len)) {
+            sodium_memzero(auth_key, sizeof(auth_key));
+            sodium_memzero(counter_nonce, sizeof(counter_nonce));
+            sodium_memzero(enc_key, sizeof(enc_key));
+            sodium_memzero(decoded_footer, decoded_footer_len);
+            sodium_memzero(decoded, body_len);
             free(decoded_footer);
             free(decoded);
             errno = ENOMEM;
@@ -308,16 +333,24 @@ uint8_t *paseto_v4_local_decrypt(
             pa.base, pre_auth_len,
             auth_key, sizeof(auth_key));
     }
+    sodium_memzero(pa.base, pre_auth_len);
     free(pa.base);
 
     /* #8. Compare t and t2, reject if not equal */
     if (sodium_memcmp(mac, pae_hash, mac_len) != 0)
     {
+        sodium_memzero(pae_hash, sizeof(pae_hash));
+        sodium_memzero(auth_key, sizeof(auth_key));
+        sodium_memzero(counter_nonce, sizeof(counter_nonce));
+        sodium_memzero(enc_key, sizeof(enc_key));
+        sodium_memzero(decoded_footer, decoded_footer_len);
+        sodium_memzero(decoded, body_len);
         free(decoded_footer);
         free(decoded);
         errno = EINVAL;
         return NULL;
     }
+    sodium_memzero(pae_hash, sizeof(pae_hash));
 
     /* #9. Decrypt with XChacha20 */
     uint8_t *plaintext;
@@ -326,6 +359,11 @@ uint8_t *paseto_v4_local_decrypt(
     {
         plaintext = malloc(ciphertext_len+1);
         if (!plaintext) {
+            sodium_memzero(auth_key, sizeof(auth_key));
+            sodium_memzero(counter_nonce, sizeof(counter_nonce));
+            sodium_memzero(enc_key, sizeof(enc_key));
+            sodium_memzero(decoded_footer, decoded_footer_len);
+            sodium_memzero(decoded, body_len);
             free(decoded_footer);
             free(decoded);
             errno = ENOMEM;
@@ -343,14 +381,22 @@ uint8_t *paseto_v4_local_decrypt(
     if (footer)
         *footer = decoded_footer;
     else
+    {
+        sodium_memzero(decoded_footer, decoded_footer_len);
         free(decoded_footer);
+    }
 
     if (footer_len)
         *footer_len = decoded_footer_len;
 
+    sodium_memzero(decoded, body_len);
     free(decoded);
 
     *message_len = plaintext_len;
+
+    sodium_memzero(auth_key, sizeof(auth_key));
+    sodium_memzero(counter_nonce, sizeof(counter_nonce));
+    sodium_memzero(enc_key, sizeof(enc_key));
 
     return plaintext;
 }
@@ -490,7 +536,7 @@ bool paseto_v4_local_key_from_paserk(
         }
 
         size_t output_len;
-        uint8_t * pdk = paserk_v2_seal_decrypt(&output_len,
+        uint8_t * pdk = paserk_v2_unseal(&output_len,
                         paserk_seal, paserk_seal_len,
                         secret, secret_len,
                         paserk_data, len);

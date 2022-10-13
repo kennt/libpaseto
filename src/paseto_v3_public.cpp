@@ -161,9 +161,11 @@ char *paseto_v3_public_sign(
         {
             fprintf(stderr, "hex2bin failed dest-len(%zu) src-len(%zu) (%d)\n",
                 pubkey_bin_len, pubkey_hex.length(), __LINE__);
+            sodium_memzero(pubkey_hex.data(), pubkey_hex.length());
             errno = EINVAL;
             return NULL;
         }
+        sodium_memzero(pubkey_hex.data(), pubkey_hex.length());
     }
 
     struct pre_auth pa;
@@ -179,6 +181,7 @@ char *paseto_v3_public_sign(
                 implicit_assertion_len
                 ))
         {
+            sodium_memzero(pubkey_bin, pubkey_bin_len);
             errno = EINVAL;
             return NULL;
         }
@@ -203,10 +206,15 @@ char *paseto_v3_public_sign(
         {
             fprintf(stderr, "unexpected signature length: actual:%zu expected:%zu\n",
                 siglen, signature_len);
+            sodium_memzero(sig, sizeof(sig));
+            sodium_memzero(pubkey_bin, pubkey_bin_len);
+            sodium_memzero(pa.base, pre_auth_len);
+            free(pa.base);
             errno = EINVAL;
             return NULL;
         }
     }
+    sodium_memzero(pa.base, pre_auth_len);
     free(pa.base);
 
     /* #5. Create the output */
@@ -214,6 +222,8 @@ char *paseto_v3_public_sign(
     uint8_t * to_encode = (uint8_t *) malloc(to_encode_len);
     if (to_encode == NULL)
     {
+        sodium_memzero(sig, sizeof(sig));
+        sodium_memzero(pubkey_bin, pubkey_bin_len);
         errno = ENOMEM;
         return NULL;
     }
@@ -227,11 +237,17 @@ char *paseto_v3_public_sign(
     if (output == NULL)
     {
         fprintf(stderr, "encode_output failed (%d)\n", __LINE__);
+        sodium_memzero(sig, sizeof(sig));
+        sodium_memzero(pubkey_bin, pubkey_bin_len);
+        sodium_memzero(to_encode, to_encode_len);
         free(to_encode);
         errno = EINVAL;
         return NULL;
     }
 
+    sodium_memzero(sig, sizeof(sig));
+    sodium_memzero(pubkey_bin, pubkey_bin_len);
+    sodium_memzero(to_encode, to_encode_len);
     free(to_encode);
 
     return output;
@@ -290,10 +306,10 @@ uint8_t *paseto_v3_public_verify(
     uint8_t *message;
     size_t internal_message_len;
     uint8_t *sig;
+    size_t body_len = 0;
 
     {
         uint8_t *body = NULL;
-        size_t body_len = 0;
 
         decoded = decode_input(
                          encoded, encoded_len,
@@ -322,6 +338,8 @@ uint8_t *paseto_v3_public_verify(
                 decoded_footer_len +
                 implicit_assertion_len))
         {
+            sodium_memzero(decoded_footer, decoded_footer_len);
+            sodium_memzero(decoded, body_len);
             free(decoded_footer);
             free(decoded);
             errno = ENOMEM;
@@ -342,6 +360,9 @@ uint8_t *paseto_v3_public_verify(
                 sig, signature_len))
         {
             fprintf(stderr, "verify() failed %d\n", __LINE__);
+            sodium_memzero(pa.base, pre_auth_len);
+            sodium_memzero(decoded_footer, decoded_footer_len);
+            sodium_memzero(decoded, body_len);
             free(pa.base);
             free(decoded_footer);
             free(decoded);
@@ -349,6 +370,7 @@ uint8_t *paseto_v3_public_verify(
             return NULL;
         }
     }
+    sodium_memzero(pa.base, pre_auth_len);
     free(pa.base);
 
     /* #7. If valid, return m */
@@ -359,7 +381,10 @@ uint8_t *paseto_v3_public_verify(
     if (footer)
         *footer = decoded_footer;
     else
+    {
+        sodium_memzero(decoded_footer, decoded_footer_len);
         free(decoded_footer);
+    }
 
     if (footer_len)
         *footer_len = decoded_footer_len;

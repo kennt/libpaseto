@@ -204,6 +204,12 @@ public:
 
         this->resize(orig_size+bin_len);
     }
+
+    ~BinaryVector()
+    {
+        if (!this->empty())
+            sodium_memzero(this->data(), this->size());
+    }
 };
 
 class Binary

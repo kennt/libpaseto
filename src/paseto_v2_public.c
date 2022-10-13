@@ -84,6 +84,7 @@ char *paseto_v2_public_sign(
 
     struct pre_auth pa;
     if (!pre_auth_init(&pa, 3, header_len + message_len + footer_len)) {
+        sodium_memzero(to_encode, to_encode_len);
         free(to_encode);
         errno = ENOMEM;
         return NULL;
@@ -96,6 +97,7 @@ char *paseto_v2_public_sign(
     uint8_t *ct = to_encode + message_len;
     crypto_sign_detached(ct, NULL, pa.base, pre_auth_len, key);
 
+    sodium_memzero(pa.base, pre_auth_len);
     free(pa.base);
 
     size_t encoded_len = BIN_TO_BASE64_MAXLEN(to_encode_len) - 1; // minus included trailing NULL byte
@@ -106,6 +108,7 @@ char *paseto_v2_public_sign(
     char *output_current = output;
     size_t output_len_remaining = output_len;
     if (!output) {
+        sodium_memzero(to_encode, to_encode_len);
         free(to_encode);
         errno = ENOMEM;
         return NULL;
@@ -121,6 +124,7 @@ char *paseto_v2_public_sign(
     output_current += encoded_len;
     output_len_remaining -= encoded_len;
 
+    sodium_memzero(to_encode, to_encode_len);
     free(to_encode);
 
     if (footer) {
@@ -157,7 +161,7 @@ uint8_t *paseto_v2_public_verify(
     const char *encoded_end = strchr(encoded, '.');
     if (!encoded_end) encoded_end = encoded + encoded_len;
     const size_t decoded_maxlen = encoded_end - encoded;
-    uint8_t *decoded = malloc(decoded_maxlen);
+    uint8_t *decoded = (uint8_t *) malloc(decoded_maxlen);
     if (!decoded) {
         errno = ENOMEM;
         return NULL;
@@ -171,6 +175,7 @@ uint8_t *paseto_v2_public_verify(
             NULL, &decoded_len,
             &encoded_footer,
             sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
+        sodium_memzero(decoded, decoded_maxlen);
         free(decoded);
         errno = EINVAL;
         return NULL;
@@ -189,7 +194,7 @@ uint8_t *paseto_v2_public_verify(
         encoded_footer_len--;
         encoded_footer++;
 
-        decoded_footer = malloc(encoded_footer_len);
+        decoded_footer = (uint8_t *) malloc(encoded_footer_len);
 
         if (sodium_base642bin(
                 decoded_footer, encoded_len - decoded_len,
@@ -197,7 +202,9 @@ uint8_t *paseto_v2_public_verify(
                 NULL, &decoded_footer_len,
                 NULL,
                 sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
+            sodium_memzero(decoded, decoded_maxlen);
             free(decoded);
+            sodium_memzero(decoded_footer, encoded_footer_len);
             free(decoded_footer);
             errno = EINVAL;
             return NULL;
@@ -207,7 +214,9 @@ uint8_t *paseto_v2_public_verify(
     struct pre_auth pa;
     if (!pre_auth_init(&pa, 3,
             header_len + internal_message_len + decoded_footer_len)) {
+        sodium_memzero(decoded, decoded_maxlen);
         free(decoded);
+        sodium_memzero(decoded_footer, encoded_footer_len);
         free(decoded_footer);
         errno = ENOMEM;
         return NULL;
@@ -218,8 +227,11 @@ uint8_t *paseto_v2_public_verify(
     size_t pre_auth_len = pa.current - pa.base;
 
 
-    uint8_t *message = malloc(internal_message_len + 1);
+    uint8_t *message = (uint8_t *) malloc(internal_message_len + 1);
     if (!message) {
+        sodium_memzero(decoded, decoded_maxlen);
+        sodium_memzero(decoded_footer, encoded_footer_len);
+        sodium_memzero(pa.base, pre_auth_len);
         free(decoded);
         free(decoded_footer);
         free(pa.base);
@@ -228,6 +240,10 @@ uint8_t *paseto_v2_public_verify(
     }
     if (crypto_sign_verify_detached(
             signature, pa.base, pre_auth_len, key) != 0) {
+        sodium_memzero(decoded, decoded_maxlen);
+        sodium_memzero(decoded_footer, encoded_footer_len);
+        sodium_memzero(pa.base, pre_auth_len);
+        sodium_memzero(message, internal_message_len + 1);
         free(decoded);
         free(decoded_footer);
         free(pa.base);
@@ -239,13 +255,17 @@ uint8_t *paseto_v2_public_verify(
     memcpy(message, decoded, internal_message_len);
     message[internal_message_len] = '\0';
 
+    sodium_memzero(pa.base, pre_auth_len);
     free(pa.base);
+    sodium_memzero(decoded, decoded_maxlen);
     free(decoded);
 
     if (decoded_footer && footer && footer_len) {
         uint8_t *internal_footer = malloc(decoded_footer_len + 1);
         if (!internal_footer) {
+            sodium_memzero(decoded_footer, encoded_footer_len);
             free(decoded_footer);
+            sodium_memzero(message, internal_message_len + 1);
             free(message);
             errno = ENOMEM;
             return NULL;
@@ -259,6 +279,7 @@ uint8_t *paseto_v2_public_verify(
         if (footer_len) *footer_len = 0;
     }
 
+    sodium_memzero(decoded_footer, encoded_footer_len);
     free(decoded_footer);
 
     *message_len = internal_message_len;
