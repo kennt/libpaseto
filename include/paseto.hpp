@@ -117,6 +117,11 @@ public:
             reinterpret_cast<const uint8_t *>(sv.data()), sv.length())
     {}
 
+    binary_view(const std::string &s)
+        : std::basic_string_view<uint8_t>(
+            reinterpret_cast<const uint8_t *>(s.data()), s.length())
+    {}
+
     static binary_view fromString(const std::string_view s)
     {
         binary_view bin_view(s);
@@ -465,7 +470,7 @@ public:
         return _data.data();
     }
 
-    size_t size()
+    size_t size() const
     {
         return _data.size();
     }
@@ -482,6 +487,7 @@ public:
 
     void clear()
     {
+        sodium_memzero(&_data[0], _data.size());
         _data.clear();
         _data.resize(_required_length);
         _is_loaded = false;
@@ -527,7 +533,7 @@ public:
     }
 
     virtual Token verify(
-                const std::string_view &token,
+                const std::string_view &    ,
                 const binary_view &implicit_assertion = binary::none) const
     {
         throw InvalidKeyException(
@@ -647,13 +653,6 @@ public:
 
     virtual ~Key() {}
 
-    bool operator==(const Key & other)
-    {
-        return this->_is_loaded == other._is_loaded &&
-               this->_key_type == other._key_type &&
-               this->_data == other._data;
-    }
-
     std::string dump()
     {
         return fmt::format(" key_type:{} is_loaded:{} data:{}",
@@ -670,11 +669,32 @@ protected:
 
 private:
     friend class Keys;
+    friend bool operator==(const Key&, const Key&);
+};
+
+
+inline bool operator==(const Key &lhs, const Key &rhs)
+{
+    return lhs.is_loaded() == rhs.is_loaded() &&
+           lhs.keyType() == lhs.keyType() &&
+           lhs.size() == rhs.size() &&
+           lhs._data == rhs._data;
+}
+
+inline bool operator!=(const Key &lhs, const Key &rhs)
+{
+    return !(lhs == rhs);
+}
+
+
+inline std::ostream& operator<< ( std::ostream& os, const paseto::Key & value ) {
+    os << "loaded:" << value.is_loaded() << " type:" << KeyTypeToString(value.keyType())
+       << " len:" << value.size() << " data:" << value.toHex();
+    return os;
 };
 
 
 // Helper functions
-
 
 template<typename T>
 using FN_TOPASERK =  char * (*)(uint8_t *, const char *, const uint8_t *, size_t, T *);
@@ -684,17 +704,17 @@ using FN_FROMPASERK =  bool (*)(uint8_t *, const char *, size_t, const uint8_t *
 template<typename T>
 using FN_CONVERT_PARAMS =  T * (*)(struct PasswordParams *);
 
-v2PasswordParams * convert_v2(struct PasswordParams *p)
+inline v2PasswordParams * convert_v2(struct PasswordParams *p)
 {
     return p == NULL ? NULL : &(p->params.v2);
 }
 
-v3PasswordParams * convert_v3(struct PasswordParams *p)
+inline v3PasswordParams * convert_v3(struct PasswordParams *p)
 {
     return p == NULL ? NULL : &(p->params.v3);
 }
 
-v4PasswordParams * convert_v4(struct PasswordParams *p)
+inline v4PasswordParams * convert_v4(struct PasswordParams *p)
 {
     return p == NULL ? NULL : &(p->params.v4);
 }

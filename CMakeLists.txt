@@ -145,7 +145,9 @@ add_custom_command(TARGET pasetotest POST_BUILD
 add_executable(pasetocpptests
 	test/helpers.h
 	test/helpers.c
-	test/test.cpp)
+	test/test.cpp
+	test/testv2local.cpp
+	)
 target_link_libraries(pasetocpptests
 	PRIVATE
 	paseto

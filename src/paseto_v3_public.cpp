@@ -452,7 +452,7 @@ char * paseto_v3_public_key_to_paserk(
 }
 
 bool paseto_v3_public_key_from_paserk(
-    uint8_t key[paseto_v3_LOCAL_KEYBYTES],
+    uint8_t key[paseto_v3_PUBLIC_PUBLICKEYBYTES],
     const char * paserk_key, size_t paserk_key_len,
     const uint8_t * secret, size_t secret_len)
 {
@@ -465,8 +465,17 @@ bool paseto_v3_public_key_from_paserk(
                 NULL, &len, NULL,
                 sodium_base64_VARIANT_URLSAFE_NO_PADDING) == 0)
         {
+            if (len != paseto_v3_PUBLIC_PUBLICKEYBYTES)
+            {
+                fprintf(stderr, "unexpected key length: actual:%zu expected:%u\n",
+                    len, paseto_v3_PUBLIC_PUBLICKEYBYTES);
+                sodium_memzero(key, paseto_v3_PUBLIC_PUBLICKEYBYTES);
+                errno = EINVAL;
+                return false;
+            }
             return true;
         }
+        sodium_memzero(key, paseto_v3_PUBLIC_PUBLICKEYBYTES);
     }
     errno = EINVAL;
     return false;
@@ -575,8 +584,17 @@ bool paseto_v3_secret_key_from_paserk(
                 NULL, &len, NULL,
                 sodium_base64_VARIANT_URLSAFE_NO_PADDING) == 0)
         {
+            if (len != paseto_v3_PUBLIC_SECRETKEYBYTES)
+            {
+                fprintf(stderr, "unexpected key length: actual:%zu expected:%u\n",
+                    len, paseto_v3_PUBLIC_SECRETKEYBYTES);
+                sodium_memzero(key, paseto_v3_PUBLIC_SECRETKEYBYTES);
+                errno = EINVAL;
+                return false;
+            }
             return true;
         }
+        sodium_memzero(key, paseto_v3_PUBLIC_SECRETKEYBYTES);
     }
     else if (strncmp(paserk_key, paserk_secret_wrap, paserk_secret_wrap_len) == 0)
     {

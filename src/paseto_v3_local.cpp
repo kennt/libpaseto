@@ -1387,8 +1387,17 @@ bool paseto_v3_local_key_from_paserk(
                 NULL, &len, NULL,
                 sodium_base64_VARIANT_URLSAFE_NO_PADDING) == 0)
         {
+            if (len != paseto_v3_LOCAL_KEYBYTES)
+            {
+                fprintf(stderr, "unexpected key length: actual:%zu expected:%u\n",
+                    len, paseto_v3_LOCAL_KEYBYTES);
+                sodium_memzero(key, paseto_v3_LOCAL_KEYBYTES);
+                errno = EINVAL;
+                return false;
+            }
             return true;
         }
+        sodium_memzero(key, paseto_v3_LOCAL_KEYBYTES);
     }
     else if (strncmp(paserk_key, paserk_seal, paserk_seal_len) == 0)
     {
