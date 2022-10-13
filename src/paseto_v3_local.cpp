@@ -16,6 +16,7 @@ using CryptoPP::AES;
 #include "cryptopp/eccrypto.h"
 using CryptoPP::ECP;
 using CryptoPP::ECDH;
+using CryptoPP::ECDSA_RFC6979;
 
 #include "cryptopp/algebra.h"
 using CryptoPP::Integer;
