@@ -102,24 +102,24 @@ public:
 
 
 
-class BinaryView : public std::basic_string_view<uint8_t>
+class binary_view : public std::basic_string_view<uint8_t>
 {
 public:
-    BinaryView()
+    binary_view()
     {}
 
-    BinaryView(const uint8_t*p, size_t len)
+    binary_view(const uint8_t*p, size_t len)
         : std::basic_string_view<uint8_t>(p, len)
     {}
 
-    BinaryView(const std::string_view &sv)
+    binary_view(const std::string_view &sv)
         : std::basic_string_view<uint8_t>(
             reinterpret_cast<const uint8_t *>(sv.data()), sv.length())
     {}
 
-    static BinaryView fromString(const std::string_view s)
+    static binary_view fromString(const std::string_view s)
     {
-        BinaryView bin_view(s);
+        binary_view bin_view(s);
         return bin_view;        
     }
 
@@ -134,15 +134,15 @@ public:
 
 };
 
-class BinaryVector : public std::vector<uint8_t>
+class binary : public std::vector<uint8_t>
 {
 public:
-    operator BinaryView() const
+    operator binary_view() const
     {
-        return BinaryView(data(), size());
+        return binary_view(data(), size());
     }
 
-    bool operator==(const BinaryVector &other)
+    bool operator==(const binary &other)
     {
         return std::operator==(*this, other);
     }
@@ -205,19 +205,15 @@ public:
         this->resize(orig_size+bin_len);
     }
 
-    ~BinaryVector()
+    ~binary()
     {
         if (!this->empty())
             sodium_memzero(this->data(), this->size());
     }
-};
 
-class Binary
-{
-public:
-    static BinaryVector fromHex(const std::string_view &s, size_t required_len=0)
+    static binary fromHex(const std::string_view &s, size_t required_len=0)
     {
-        BinaryVector vec;
+        binary vec;
         size_t bin_len;
 
         if (required_len)
@@ -242,9 +238,9 @@ public:
         return vec;
     }
 
-    static BinaryVector fromString(const std::string_view &s, size_t required_len=0)
+    static binary fromString(const std::string_view &s, size_t required_len=0)
     {
-        BinaryVector vec;
+        binary vec;
 
         if (required_len && s.length() != required_len)
             throw LengthMismatchException(
@@ -261,9 +257,9 @@ public:
         return vec;
     }
 
-    static BinaryVector fromBase64(const std::string_view &s, size_t required_len=0)
+    static binary fromBase64(const std::string_view &s, size_t required_len=0)
     {
-        BinaryVector vec;
+        binary vec;
         size_t bin_len;
 
         if (required_len)
@@ -288,14 +284,14 @@ public:
         return vec;
     }
 
-    static BinaryVector fromBinary(const BinaryView &bv, size_t required_len=0)
+    static binary fromBinary(const binary_view &bv, size_t required_len=0)
     {
         return fromBinary(bv.data(), bv.size(), required_len);
     }
 
-    static BinaryVector fromBinary(const uint8_t *p, size_t len, size_t required_len=0)
+    static binary fromBinary(const uint8_t *p, size_t len, size_t required_len=0)
     {
-        BinaryVector vec;
+        binary vec;
 
         if (required_len && len != required_len)
             throw LengthMismatchException(
@@ -312,8 +308,9 @@ public:
         return vec;
     }
 
-    inline static BinaryView none;
+    inline static binary_view none;
 };
+
 
 enum class KeyType : int {
     UNKNOWN = 0,
@@ -401,8 +398,8 @@ public:
         uint8_t *footer, size_t footer_len)
     : _key_type(key_type)
     {
-        _payload = Binary::fromBinary(payload, payload_length);
-        _footer = Binary::fromBinary(footer, footer_len);
+        _payload = binary::fromBinary(payload, payload_length);
+        _footer = binary::fromBinary(footer, footer_len);
     }
 
     std::string description()
@@ -410,23 +407,23 @@ public:
         return KeyTypeToHeader(_key_type);
     }
 
-    BinaryVector header()
+    binary header()
     {
-        return Binary::fromString(description());
+        return binary::fromString(description());
     }
 
-    const BinaryVector &payload()
+    const binary &payload()
     {
         return _payload;
     }
-    const BinaryVector &footer()
+    const binary &footer()
     {
         return _footer;
     }
 private:
     KeyType _key_type;
-    BinaryVector _payload;
-    BinaryVector _footer;
+    binary _payload;
+    binary _footer;
 };
 
 
@@ -448,9 +445,9 @@ public:
         return KeyTypeToHeader(_key_type);
     }
 
-    BinaryVector header()
+    binary header()
     {
-        return Binary::fromString(description());
+        return binary::fromString(description());
     }
 
     KeyType keyType() const
@@ -501,9 +498,9 @@ public:
     }
 
     virtual std::string encrypt(
-                const BinaryView &payload,
-                const BinaryView &footer = Binary::none,
-                const BinaryView &implicit_assertion = Binary::none) const
+                const binary_view &payload,
+                const binary_view &footer = binary::none,
+                const binary_view &implicit_assertion = binary::none) const
     {
         throw InvalidKeyException(
             fmt::format("InvalidKey: this is not a LOCAL key:{} (line {})",
@@ -512,7 +509,7 @@ public:
 
     virtual Token decrypt(
                 const std::string_view &token,
-                const BinaryView &implicit_assertion = Binary::none) const
+                const binary_view &implicit_assertion = binary::none) const
     {
         throw InvalidKeyException(
             fmt::format("InvalidKey: this is not a LOCAL key:{} (line {})",
@@ -520,9 +517,9 @@ public:
     }
 
     virtual std::string sign(
-                const BinaryView &payload,
-                const BinaryView &footer = Binary::none,
-                const BinaryView &implicit_assertion = Binary::none) const
+                const binary_view &payload,
+                const binary_view &footer = binary::none,
+                const binary_view &implicit_assertion = binary::none) const
     {
         throw InvalidKeyException(
             fmt::format("InvalidKey: this is not a SECRET key:{} (line {})",
@@ -531,7 +528,7 @@ public:
 
     virtual Token verify(
                 const std::string_view &token,
-                const BinaryView &implicit_assertion = Binary::none) const
+                const binary_view &implicit_assertion = binary::none) const
     {
         throw InvalidKeyException(
             fmt::format("InvalidKey: this is not a PUBLIC key:{} (line {})",
@@ -540,32 +537,40 @@ public:
 
     virtual std::string toPaserkId()
     {
-        throw UnexpectedException("Not yet implemented");
+        throw UnexpectedException("Unexpected: Not yet implemented");
     }
 
     virtual std::string toPaserk()
     {
-        throw UnexpectedException("Not yet implemented");
+        throw UnexpectedException("Unexpected: Not yet implemented");
     }
 
-    virtual std::string toPaserkWrap(const BinaryView &wrapping_key)
+    virtual std::string paserkWrap(const binary_view &wrapping_key)
     {
-        throw UnexpectedException("Not yet implemented");
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only LOCAL/SECRET keys are allowed:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
     }
 
-    virtual std::string toPaserkSeal(const BinaryView &public_key)
+    virtual std::string paserkSeal(const binary_view &public_key)
     {
-        throw UnexpectedException("Not yet implemented");
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only LOCAL keys can be sealed:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
     }
 
-    virtual std::string toPaserkSeal(Key * public_key)
+    virtual std::string paserkSeal(Key * public_key)
     {
-        throw UnexpectedException("Not yet implemented");
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only LOCAL keys can be sealed:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
     }
 
-    virtual std::string toPaserkPassword(const std::string &pw, struct PasswordParams *opts)
+    virtual std::string paserkPasswordWrap(const std::string &pw, struct PasswordParams *opts)
     {
-        throw UnexpectedException("Not yet implemented");
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only LOCAL/SECRET keys are allowed:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
     }
 
     virtual void fromPaserk(const std::string& paserk_key)
@@ -573,29 +578,37 @@ public:
         throw UnexpectedException("Not yet implemented");
     }
 
-    virtual void fromPaserkWrap(const std::string &paserk, const BinaryView &sk)
+    virtual void paserkUnwrap(const std::string &paserk, const binary_view &sk)
     {
-        throw UnexpectedException("Not yet implemented");
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only LOCAL/SECRET keys are allowed:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
     }
 
-    virtual void fromPaserkSeal(const std::string &paserk, const BinaryView &sk)
+    virtual void paserkUnseal(const std::string &paserk, const binary_view &sk)
     {
-        throw UnexpectedException("Not yet implemented");
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only LOCAL keys can be unsealed:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
     }
 
-    virtual void fromPaserkSeal(const std::string &paserk, Key * secret_key)
+    virtual void paserkUnseal(const std::string &paserk, Key * secret_key)
     {
-        throw UnexpectedException("Not yet implemented");
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only LOCAL keys can be unsealed:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
     }
 
-    virtual void fromPaserkPassword(const std::string &paserk, const std::string &password)
+    virtual void paserkPasswordUnwrap(const std::string &paserk, const std::string &password)
     {
-        throw UnexpectedException("Not yet implemented");
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only LOCAL/SECRET keys are allowed:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
     }
 
 
 #ifdef DEBUG
-    void setNonce(const std::string &nonce_hex, const BinaryView &payload)
+    void setNonce(const std::string &nonce_hex, const binary_view &payload)
     {
         if (KeyTypeVersion(_key_type) == 2)
         {
@@ -611,7 +624,7 @@ public:
         else if ((KeyTypeVersion(_key_type) == 3) ||
                  (KeyTypeVersion(_key_type) == 4))
         {
-            _nonce = Binary::fromHex(nonce_hex, 32);
+            _nonce = binary::fromHex(nonce_hex, 32);
         }
         else
             throw UnsupportedException(
@@ -649,11 +662,11 @@ public:
 
 protected:
     bool _is_loaded;
-    BinaryVector _data;
+    binary _data;
     size_t _required_length;
     KeyType _key_type;
 
-    BinaryVector _nonce;
+    binary _nonce;
 
 private:
     friend class Keys;
@@ -781,13 +794,13 @@ public:
             fmt::format("k{}.lid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
-    std::string toPaserkSeal(const BinaryView &pk) override
+    std::string paserkSeal(const binary_view &pk) override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.seal.", KeyTypeVersion(_key_type)), pk.data(), pk.size(), NULL);
     }
 
-    std::string toPaserkSeal(Key * public_key) override
+    std::string paserkSeal(Key * public_key) override
     {
         if (public_key == NULL)
             throw UnexpectedException("unexpected: a public_key must be provided");
@@ -804,10 +817,10 @@ public:
                     KeyTypePurpose(public_key->keyType())));
 
         public_key->checkKey();
-        return toPaserkSeal(BinaryView(public_key->data(), public_key->size()));
+        return paserkSeal(binary_view(public_key->data(), public_key->size()));
     }
 
-    void fromPaserkSeal(const std::string &paserk, const BinaryView &sk) override
+    void paserkUnseal(const std::string &paserk, const binary_view &sk) override
     {
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.seal.", KeyTypeVersion(_key_type)),
@@ -816,7 +829,7 @@ public:
         _is_loaded = true;
     }
 
-    void fromPaserkSeal(const std::string &paserk, Key * secret_key) override
+    void paserkUnseal(const std::string &paserk, Key * secret_key) override
     {
         if (secret_key == NULL)
             throw UnexpectedException("unexpected: a secret_key must be provided");
@@ -834,16 +847,16 @@ public:
 
         secret_key->checkKey();
 
-        fromPaserkSeal(paserk, BinaryView(secret_key->data(), secret_key->size()));
+        paserkUnseal(paserk, binary_view(secret_key->data(), secret_key->size()));
     }
 
-    std::string toPaserkWrap(const BinaryView &wk) override
+    std::string paserkWrap(const binary_view &wk) override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
     }
 
-    void fromPaserkWrap(const std::string &paserk, const BinaryView &wk) override
+    void paserkUnwrap(const std::string &paserk, const binary_view &wk) override
     {
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)),
@@ -852,7 +865,7 @@ public:
         _is_loaded = true;
     }
 
-    std::string toPaserkPassword(const std::string &pw, struct PasswordParams *opts) override
+    std::string paserkPasswordWrap(const std::string &pw, struct PasswordParams *opts) override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
@@ -860,7 +873,7 @@ public:
     }
 
 
-    void fromPaserkPassword(const std::string &paserk, const std::string &password) override
+    void paserkPasswordUnwrap(const std::string &paserk, const std::string &password) override
     {
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
@@ -871,9 +884,9 @@ public:
 
     // A base64 encoded string is returned
     std::string encrypt(
-                const BinaryView &payload,
-                const BinaryView &footer = Binary::none,
-                const BinaryView &implicit_assertion = Binary::none) const override
+                const binary_view &payload,
+                const binary_view &footer = binary::none,
+                const binary_view &implicit_assertion = binary::none) const override
     {
         checkKey();
 
@@ -898,7 +911,7 @@ public:
 
     Token decrypt(
                 const std::string_view &token,
-                const BinaryView &implicit_assertion = Binary::none) const override
+                const binary_view &implicit_assertion = binary::none) const override
     {
         checkKey();
 
@@ -962,7 +975,7 @@ public:
 
     Token verify(
                 const std::string_view &token,
-                const BinaryView &implicit_assertion = Binary::none) const override
+                const binary_view &implicit_assertion = binary::none) const override
     {
         checkKey();
 
@@ -1023,13 +1036,13 @@ public:
             fmt::format("k{}.sid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
-    std::string toPaserkWrap(const BinaryView &wk) override
+    std::string paserkWrap(const binary_view &wk) override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
     }
 
-    void fromPaserkWrap(const std::string &paserk, const BinaryView &wk) override
+    void paserkUnwrap(const std::string &paserk, const binary_view &wk) override
     {
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)),
@@ -1038,7 +1051,7 @@ public:
         _is_loaded = true;
     }
 
-    std::string toPaserkPassword(const std::string &pw, struct PasswordParams *opts) override
+    std::string paserkPasswordWrap(const std::string &pw, struct PasswordParams *opts) override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
@@ -1046,7 +1059,7 @@ public:
     }
 
 
-    void fromPaserkPassword(const std::string &paserk, const std::string &password) override
+    void paserkPasswordUnwrap(const std::string &paserk, const std::string &password) override
     {
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
@@ -1056,9 +1069,9 @@ public:
     }
 
     std::string sign(
-                const BinaryView &payload,
-                const BinaryView &footer = Binary::none,
-                const BinaryView &implicit_assertion = Binary::none) const override
+                const binary_view &payload,
+                const binary_view &footer = binary::none,
+                const binary_view &implicit_assertion = binary::none) const override
     {
         checkKey();
 
@@ -1119,13 +1132,13 @@ public:
             fmt::format("k{}.lid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
-    std::string toPaserkSeal(const BinaryView &pk) override
+    std::string paserkSeal(const binary_view &pk) override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.seal.", KeyTypeVersion(_key_type)), pk.data(), pk.size(), NULL);
     }
 
-    std::string toPaserkSeal(Key * public_key) override
+    std::string paserkSeal(Key * public_key) override
     {
         if (public_key == NULL)
             throw UnexpectedException("unexpected: a public_key must be provided");
@@ -1142,10 +1155,10 @@ public:
                     KeyTypePurpose(public_key->keyType())));
 
         public_key->checkKey();
-        return toPaserkSeal(BinaryView(public_key->data(), public_key->size()));
+        return paserkSeal(binary_view(public_key->data(), public_key->size()));
     }
 
-    void fromPaserkSeal(const std::string &paserk, const BinaryView &sk) override
+    void paserkUnseal(const std::string &paserk, const binary_view &sk) override
     {
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.seal.", KeyTypeVersion(_key_type)),
@@ -1154,7 +1167,7 @@ public:
         _is_loaded = true;
     }
 
-    void fromPaserkSeal(const std::string &paserk, Key * secret_key) override
+    void paserkUnseal(const std::string &paserk, Key * secret_key) override
     {
         if (secret_key == NULL)
             throw UnexpectedException("unexpected: a secret_key must be provided");
@@ -1172,16 +1185,16 @@ public:
 
         secret_key->checkKey();
 
-        fromPaserkSeal(paserk, BinaryView(secret_key->data(), secret_key->size()));
+        paserkUnseal(paserk, binary_view(secret_key->data(), secret_key->size()));
     }
 
-    std::string toPaserkWrap(const BinaryView &wk) override
+    std::string paserkWrap(const binary_view &wk) override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
     }
 
-    void fromPaserkWrap(const std::string &paserk, const BinaryView &wk) override
+    void paserkUnwrap(const std::string &paserk, const binary_view &wk) override
     {
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)),
@@ -1190,7 +1203,7 @@ public:
         _is_loaded = true;
     }
 
-    std::string toPaserkPassword(const std::string &pw, struct PasswordParams *opts) override
+    std::string paserkPasswordWrap(const std::string &pw, struct PasswordParams *opts) override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
@@ -1198,7 +1211,7 @@ public:
     }
 
 
-    void fromPaserkPassword(const std::string &paserk, const std::string &password) override
+    void paserkPasswordUnwrap(const std::string &paserk, const std::string &password) override
     {
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
@@ -1210,9 +1223,9 @@ public:
 
     // A base64 encoded string is returned
     std::string encrypt(
-                const BinaryView &payload,
-                const BinaryView &footer = Binary::none,
-                const BinaryView &implicit_assertion = Binary::none) const override
+                const binary_view &payload,
+                const binary_view &footer = binary::none,
+                const binary_view &implicit_assertion = binary::none) const override
     {
         checkKey();
 
@@ -1235,7 +1248,7 @@ public:
 
     Token decrypt(
                 const std::string_view &token,
-                const BinaryView &implicit_assertion = Binary::none) const override
+                const binary_view &implicit_assertion = binary::none) const override
     {
         checkKey();
 
@@ -1293,7 +1306,7 @@ public:
 
     Token verify(
                 const std::string_view &token,
-                const BinaryView &implicit_assertion = Binary::none) const override
+                const binary_view &implicit_assertion = binary::none) const override
     {
         checkKey();
 
@@ -1349,13 +1362,13 @@ public:
             fmt::format("k{}.sid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
     }
 
-    std::string toPaserkWrap(const BinaryView &wk) override
+    std::string paserkWrap(const binary_view &wk) override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
     }
 
-    void fromPaserkWrap(const std::string &paserk, const BinaryView &wk) override
+    void paserkUnwrap(const std::string &paserk, const binary_view &wk) override
     {
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)),
@@ -1364,7 +1377,7 @@ public:
         _is_loaded = true;
     }
 
-    std::string toPaserkPassword(const std::string &pw, struct PasswordParams *opts) override
+    std::string paserkPasswordWrap(const std::string &pw, struct PasswordParams *opts) override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
@@ -1372,7 +1385,7 @@ public:
     }
 
 
-    void fromPaserkPassword(const std::string &paserk, const std::string &password) override
+    void paserkPasswordUnwrap(const std::string &paserk, const std::string &password) override
     {
         loadPaserk<T, frompaserk>(this,
             fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
@@ -1383,9 +1396,9 @@ public:
 
 
     std::string sign(
-                const BinaryView &payload,
-                const BinaryView &footer = Binary::none,
-                const BinaryView &implicit_assertion = Binary::none) const override
+                const binary_view &payload,
+                const binary_view &footer = binary::none,
+                const binary_view &implicit_assertion = binary::none) const override
     {
         checkKey();
 
@@ -1511,10 +1524,10 @@ public:
         }
     }
 
-    static std::unique_ptr<Key> loadFromBinary(KeyType type, const BinaryView &bv)
+    static std::unique_ptr<Key> loadFromBinary(KeyType type, const binary_view &bv)
     {
         std::unique_ptr<Key> key = Keys::create(type);
-        key->_data = Binary::fromBinary(bv, key->_required_length);
+        key->_data = binary::fromBinary(bv, key->_required_length);
         key->_is_loaded = true;
         return key;
     }
@@ -1522,7 +1535,7 @@ public:
     static std::unique_ptr<Key> loadFromHex(KeyType type, const std::string_view &s)
     {
         std::unique_ptr<Key> key = Keys::create(type);
-        key->_data = Binary::fromHex(s, key->_required_length);
+        key->_data = binary::fromHex(s, key->_required_length);
         key->_is_loaded = true;
         return key;
     }
@@ -1530,7 +1543,7 @@ public:
     static std::unique_ptr<Key> loadFromBase64(KeyType type, const std::string_view &s)
     {
         std::unique_ptr<Key> key = Keys::create(type);
-        key->_data = Binary::fromBase64(s, key->_required_length);
+        key->_data = binary::fromBase64(s, key->_required_length);
         key->_is_loaded = true;
         return key;
     }
@@ -1556,36 +1569,69 @@ public:
         }
         else
         {
-            throw UnsupportedException("unsupported");
+            throw InvalidKeyException(
+                    fmt::format("InvalidKey: unsupported keytype: {}({}) (line {})",
+                        KeyTypeToString(type), (int) type, __LINE__));
         }
     }
 };
 
 template<KeyType kt, size_t public_size, size_t secret_size, auto fgenerate>
-std::pair<std::unique_ptr<Key>, std::unique_ptr<Key>> generateKeyPair(const BinaryView &seed)
+std::pair<std::unique_ptr<Key>, std::unique_ptr<Key>> generateKeyPair(const binary_view &seed)
 {
-    BinaryVector binPublic;
-    BinaryVector binSecret;
+    binary binPublic;
+    binary binSecret;
     binPublic.resize(public_size);
     binSecret.resize(secret_size);
 
     if (!fgenerate(seed.data(), seed.size(),
             binPublic.data(), binPublic.size(),
             binSecret.data(), binSecret.size()))
-        throw UnexpectedException("y");
+        throw UnexpectedException(
+                fmt::format("Unexpected: key generation failed {}({}) (line {})",
+                    std::strerror(errno), errno, __LINE__));
 
     return std::make_pair(
                 Keys::loadFromBinary(KeyType::V4_PUBLIC, binPublic),
                 Keys::loadFromBinary(KeyType::V4_SECRET, binSecret));
 }
 
+template<KeyType kt, size_t secret_size>
+std::unique_ptr<Key> generateKey()
+{
+    binary secret;
+    secret.resize(secret_size);
+    randombytes_buf(secret.data(), secret.size());
+
+    return Keys::loadFromBinary(kt, secret);
+}
 
 
 class KeyGen
 {
 public:
+    static std::unique_ptr<Key> generate(KeyType kt)
+    {
+        switch (kt)
+        {
+            case KeyType::V2_LOCAL:
+                return generateKey<KeyType::V2_LOCAL,
+                                   paseto_v2_LOCAL_KEYBYTES>();
+            case KeyType::V3_LOCAL:
+                return generateKey<KeyType::V3_LOCAL,
+                                   paseto_v3_LOCAL_KEYBYTES>();
+            case KeyType::V4_LOCAL:
+                return generateKey<KeyType::V4_LOCAL,
+                                   paseto_v4_LOCAL_KEYBYTES>();
+            default:
+                throw InvalidKeyException(
+                    fmt::format("InvalidKey: unsupported keytype: {}({}) (line {})",
+                        KeyTypeToString(kt), (int) kt, __LINE__));
+        }
+    }
+
     static std::pair<std::unique_ptr<Key>, std::unique_ptr<Key>> generatePair(KeyType kt,
-        const BinaryView &seed)
+        const binary_view &seed)
     {
         switch (kt)
         {

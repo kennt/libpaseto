@@ -101,6 +101,9 @@ bool paseto_v3_public_generate_keys(
     key_load_hex(public_key, public_key_len, pubkey_hex.c_str());
     key_load_hex(secret_key, secret_key_len, seckey_hex.c_str());
 
+    sodium_memzero(seckey_hex.data(), seckey_hex.length());
+    sodium_memzero(pubkey_hex.data(), pubkey_hex.length());
+
     return true;
 }
 

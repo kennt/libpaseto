@@ -60,7 +60,10 @@ bool paseto_v4_public_generate_keys(
         public_key_len != paseto_v4_PUBLIC_PUBLICKEYBYTES ||
         secret_key_len != paseto_v4_PUBLIC_SECRETKEYBYTES)
         return false;
-    crypto_sign_seed_keypair(public_key, secret_key, seed);
+    if (seed == NULL || seed_len == 0)
+        crypto_sign_keypair(public_key, secret_key);
+    else
+        crypto_sign_seed_keypair(public_key, secret_key, seed);
     return true;
 }
 

@@ -99,7 +99,7 @@ void run_test_vector(const string pathToFile,
                 if (element.contains("secret-key-seed"))
                 {
                     seed = element["secret-key-seed"].get<string>();
-                    auto seed_bytes = paseto::Binary::fromHex(seed);
+                    auto seed_bytes = paseto::binary::fromHex(seed);
                     auto key_pair = paseto::KeyGen::generatePair(
                                         public_decode_keytype, seed_bytes);
                     if (key_pair.first->toHex() != spublic_key)
@@ -107,17 +107,17 @@ void run_test_vector(const string pathToFile,
                     if (key_pair.second->toHex() != ssecret_key)
                         cerr << "Seed-generated secret key doesn't match up" << endl;
                 }
-                paseto::BinaryVector payload_bytes;
+                paseto::binary payload_bytes;
                 if (!element["payload"].is_null())
                 {
                     payload = element["payload"].get<string>();
-                    payload_bytes = paseto::Binary::fromString(payload);
+                    payload_bytes = paseto::binary::fromString(payload);
                 }
-                paseto::BinaryVector footer_bytes = 
-                            paseto::Binary::fromString(footer);
-                paseto::BinaryVector ia_bytes;
+                paseto::binary footer_bytes =
+                            paseto::binary::fromString(footer);
+                paseto::binary ia_bytes;
                 if (KeyTypeVersion(local_encode_keytype) > 2)
-                    ia_bytes = paseto::Binary::fromString(implicit_assertion);
+                    ia_bytes = paseto::binary::fromString(implicit_assertion);
                 bool test_ok = true;
 
                 auto seckey = paseto::Keys::loadFromHex(
@@ -180,18 +180,18 @@ void run_test_vector(const string pathToFile,
 
                 // encryption test
                 {
-                    paseto::BinaryVector payload_bytes;
-                    paseto::BinaryVector footer_bytes = 
-                            paseto::Binary::fromString(footer);
-                    paseto::BinaryVector ia_bytes;
+                    paseto::binary payload_bytes;
+                    paseto::binary footer_bytes =
+                            paseto::binary::fromString(footer);
+                    paseto::binary ia_bytes;
                     if (KeyTypeVersion(local_encode_keytype) > 2)
-                        ia_bytes = paseto::Binary::fromString(implicit_assertion);
+                        ia_bytes = paseto::binary::fromString(implicit_assertion);
                     bool test_ok = true;
 
                     if (!element["payload"].is_null())
                     {
                         payload = element["payload"].get<string>();
-                        payload_bytes = paseto::Binary::fromString(payload);
+                        payload_bytes = paseto::binary::fromString(payload);
                     }
 
                     unique_ptr<paseto::Key> key =
@@ -229,17 +229,17 @@ void run_test_vector(const string pathToFile,
 
                 // decryption test
                 {
-                    paseto::BinaryVector payload_bytes;
-                    paseto::BinaryVector footer_bytes = paseto::Binary::fromString(footer);
-                    paseto::BinaryVector ia_bytes;
+                    paseto::binary payload_bytes;
+                    paseto::binary footer_bytes = paseto::binary::fromString(footer);
+                    paseto::binary ia_bytes;
                     if (KeyTypeVersion(local_encode_keytype) > 2)
-                        ia_bytes = paseto::Binary::fromString(implicit_assertion);
+                        ia_bytes = paseto::binary::fromString(implicit_assertion);
                     bool test_ok = true;
 
                     if (!element["payload"].is_null())
                     {
                         payload = element["payload"].get<string>();
-                        payload_bytes = paseto::Binary::fromString(payload);
+                        payload_bytes = paseto::binary::fromString(payload);
                     }
 
                     auto key = paseto::Keys::loadFromHex(

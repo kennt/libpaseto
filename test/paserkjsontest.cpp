@@ -123,7 +123,7 @@ paseto::KeyType KeyTypeForTest(const string &version, const string &test_type)
 }
 
 typedef  std::string (paseto::Key::*FNTO_PASERK_NO_PARAMS)();
-typedef  std::string (paseto::Key::*FNTO_PASERK_SECRET)(const paseto::BinaryView &);
+typedef  std::string (paseto::Key::*FNTO_PASERK_SECRET)(const paseto::binary_view &);
 
 typedef  void (paseto::Key::*FNFROM_PASERK)(const std::string &);
 
@@ -297,11 +297,11 @@ void run_pw_test_vector(json &j, std::string version, const std::string &sKeyTyp
                 paserk_key = paseto::Keys::loadFromHex(keytype, unwrapped);
 
                 // copies paserk_key to a wrap
-                actual = paserk_key->toPaserkPassword(password, &params);
+                actual = paserk_key->paserkPasswordWrap(password, &params);
 
                 // convert back into a key
                 unsealed_key = paseto::Keys::create(keytype);
-                unsealed_key->fromPaserkPassword(actual, password);
+                unsealed_key->paserkPasswordUnwrap(actual, password);
 
                 // this should be the same as paserk_key
                 if (*paserk_key == *unsealed_key)
@@ -319,7 +319,7 @@ void run_pw_test_vector(json &j, std::string version, const std::string &sKeyTyp
                     test_ok = true;
 
                     std::unique_ptr<paseto::Key> paserk_key = paseto::Keys::create(keytype);
-                    paserk_key->fromPaserkPassword(element["paserk"].get<std::string>(), password);
+                    paserk_key->paserkPasswordUnwrap(element["paserk"].get<std::string>(), password);
 
                     std::string paserk_hex = paserk_key->toHex();
                     test_ok = (paserk_hex == unwrapped);
@@ -379,7 +379,7 @@ void run_local_wrap_pie_test_vector(json &j, std::string version, const std::str
             if (!element["paserk"].is_null())
                 paserk = element["paserk"].get<string>();
             string wrapping_key = element["wrapping-key"].get<string>();
-            paseto::BinaryVector wk_bin = paseto::Binary::fromHex(wrapping_key);
+            paseto::binary wk_bin = paseto::binary::fromHex(wrapping_key);
             bool test_ok = true;
 
             // We really can't test sealing (since it uses an ephemeral pk/sk)
@@ -399,11 +399,11 @@ void run_local_wrap_pie_test_vector(json &j, std::string version, const std::str
                 paserk_key = paseto::Keys::loadFromHex(keytype, unwrapped);
 
                 // copies paserk_key to a wrap
-                actual = paserk_key->toPaserkWrap(wk_bin);
+                actual = paserk_key->paserkWrap(wk_bin);
 
                 // convert back into a key
                 unsealed_key = paseto::Keys::create(keytype);
-                unsealed_key->fromPaserkWrap(actual, wk_bin);
+                unsealed_key->paserkUnwrap(actual, wk_bin);
 
                 // this should be the same as paserk_key
                 if (*paserk_key == *unsealed_key)
@@ -423,7 +423,7 @@ void run_local_wrap_pie_test_vector(json &j, std::string version, const std::str
                     test_ok = true;
 
                     std::unique_ptr<paseto::Key> paserk_key = paseto::Keys::create(keytype);
-                    paserk_key->fromPaserkWrap(element["paserk"].get<std::string>(), wk_bin);
+                    paserk_key->paserkUnwrap(element["paserk"].get<std::string>(), wk_bin);
 
                     std::string paserk_hex = paserk_key->toHex();
                     test_ok = (paserk_hex == unwrapped);
@@ -506,8 +506,8 @@ void run_seal_test_vector(json &j, std::string version, const std::string &sKeyT
                 paserk = element["paserk"].get<string>();
             string sealing_secret_key = element["sealing-secret-key"].get<string>();
             string sealing_public_key = element["sealing-public-key"].get<string>();
-            paseto::BinaryVector pk_bin = paseto::Binary::fromHex(sealing_public_key);
-            paseto::BinaryVector sk_bin = paseto::Binary::fromHex(sealing_secret_key);
+            paseto::binary pk_bin = paseto::binary::fromHex(sealing_public_key);
+            paseto::binary sk_bin = paseto::binary::fromHex(sealing_secret_key);
             bool test_ok = true;
 
             // We really can't test sealing (since it uses an ephemeral pk/sk)
@@ -528,11 +528,11 @@ void run_seal_test_vector(json &j, std::string version, const std::string &sKeyT
                 paserk_key = paseto::Keys::loadFromHex(keytype, unsealed);
 
                 // copies paserk_key to a seal
-                actual = paserk_key->toPaserkSeal(pk_bin);
+                actual = paserk_key->paserkSeal(pk_bin);
 
                 // convert back into a key
                 unsealed_key = paseto::Keys::create(keytype);
-                unsealed_key->fromPaserkSeal(actual, sk_bin);
+                unsealed_key->paserkUnseal(actual, sk_bin);
 
                 // this should be the same as paserk_key
                 if (*paserk_key == *unsealed_key)
@@ -553,7 +553,7 @@ void run_seal_test_vector(json &j, std::string version, const std::string &sKeyT
                     test_ok = true;
 
                     std::unique_ptr<paseto::Key> paserk_key = paseto::Keys::create(keytype);
-                    paserk_key->fromPaserkSeal(element["paserk"].get<std::string>(), sk_bin);
+                    paserk_key->paserkUnseal(element["paserk"].get<std::string>(), sk_bin);
 
                     std::string paserk_hex = paserk_key->toHex();
                     test_ok = (paserk_hex == unsealed);
@@ -614,8 +614,8 @@ void run_v3_seal_test_vector(json &j, std::string version, const std::string &sK
                 paserk = element["paserk"].get<string>();
             string sealing_secret_key = element["sealing-secret-key"].get<string>();
             string sealing_public_key = element["sealing-public-key"].get<string>();
-            //paseto::BinaryVector pk_bin = paseto::Binary::fromHex(sealing_public_key);
-            //paseto::BinaryVector sk_bin = paseto::Binary::fromHex(sealing_secret_key);
+            //paseto::binary pk_bin = paseto::binary::fromHex(sealing_public_key);
+            //paseto::binary sk_bin = paseto::binary::fromHex(sealing_secret_key);
             bool test_ok = true;
 
             // We really can't test sealing (since it uses an ephemeral pk/sk)
@@ -643,11 +643,11 @@ void run_v3_seal_test_vector(json &j, std::string version, const std::string &sK
                 paserk_key = paseto::Keys::loadFromHex(keytype, unsealed);
 
                 // copies paserk_key to a seal
-                actual = paserk_key->toPaserkSeal(pubkey.get());
+                actual = paserk_key->paserkSeal(pubkey.get());
 
                 // convert back into a key
                 unsealed_key = paseto::Keys::create(keytype);
-                unsealed_key->fromPaserkSeal(actual, seckey.get());
+                unsealed_key->paserkUnseal(actual, seckey.get());
 
                 // this should be the same as paserk_key
                 if (*paserk_key == *unsealed_key)
@@ -673,7 +673,7 @@ void run_v3_seal_test_vector(json &j, std::string version, const std::string &sK
                             paseto::KeyType::V3_SECRET, sealing_secret_key);
 
                     std::unique_ptr<paseto::Key> paserk_key = paseto::Keys::create(keytype);
-                    paserk_key->fromPaserkSeal(element["paserk"].get<std::string>(), seckey.get());
+                    paserk_key->paserkUnseal(element["paserk"].get<std::string>(), seckey.get());
 
                     std::string paserk_hex = paserk_key->toHex();
                     test_ok = (paserk_hex == unsealed);
