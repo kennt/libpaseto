@@ -56,7 +56,7 @@ bool paseto_v4_public_generate_keys(
         uint8_t *public_key, size_t public_key_len,
         uint8_t *secret_key, size_t secret_key_len)
 {
-    if (seed_len != paseto_v4_PUBLIC_SEEDBYTES ||
+    if ((seed_len != 0 && seed_len != paseto_v4_PUBLIC_SEEDBYTES) ||
         public_key_len != paseto_v4_PUBLIC_PUBLICKEYBYTES ||
         secret_key_len != paseto_v4_PUBLIC_SECRETKEYBYTES)
         return false;

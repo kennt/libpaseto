@@ -303,10 +303,7 @@ public:
                 fmt::format("LengthMismatch: Incorrect size: required:{} actual:{} (line {})",
                     required_len, len, __LINE__));
 
-        if (required_len)
-            vec.resize(required_len*sizeof(uint8_t));
-        else
-            vec.resize(len*sizeof(uint8_t));
+        vec.resize(len*sizeof(uint8_t));
 
         std::memcpy(vec.data(), p, len*sizeof(uint8_t));
 
@@ -389,6 +386,17 @@ constexpr bool isKeyTypeLocal(KeyType k)
 constexpr int KeyTypeVersion(KeyType k)
 {
     return (int)k / 10;
+}
+
+constexpr KeyType getRelatedSecretKeyType(KeyType k)
+{
+    switch (k)
+    {
+        case KeyType::V2_PUBLIC: return KeyType::V2_SECRET;
+        case KeyType::V3_PUBLIC: return KeyType::V3_SECRET;
+        case KeyType::V4_PUBLIC: return KeyType::V4_SECRET;
+        default: return KeyType::UNKNOWN;
+    }
 }
 
 class Token
@@ -558,6 +566,13 @@ public:
                 KeyTypeToString(_key_type), __LINE__));
     }
 
+    virtual std::string paserkWrap(Key * local_key)
+    {
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only LOCAL/SECRET keys are allowed:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
+    }
+
     virtual std::string paserkSeal(const binary_view &public_key)
     {
         throw InvalidKeyException(
@@ -585,6 +600,13 @@ public:
     }
 
     virtual void paserkUnwrap(const std::string &paserk, const binary_view &sk)
+    {
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only LOCAL/SECRET keys are allowed:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
+    }
+
+    virtual void paserkUnwrap(const std::string &paserk, Key * local_key)
     {
         throw InvalidKeyException(
             fmt::format("InvalidKey: only LOCAL/SECRET keys are allowed:{} (line {})",
@@ -771,7 +793,7 @@ void loadPaserk(paseto::Key *key,
 
     if (paserk_id.compare(paserk.substr(0,data_start_pos)) != 0)
         throw UnexpectedException(
-            fmt::format("Unexpected: incorrect key type: {}  expected:{}. (line {})",
+            fmt::format("Unexpected: incorrect key type: {}  expected:{} (line {})",
                 paserk.substr(0,data_start_pos), paserk_id, __LINE__));
 
     if (!frompaserk(key->data(), paserk.data(), paserk.length(), secret, secret_len))
@@ -781,56 +803,47 @@ void loadPaserk(paseto::Key *key,
 }
 
 
-template<typename T, enum KeyType key_type, size_t key_length,
-         auto fencrypt, auto fdecrypt, auto topaserk, auto frompaserk, auto fnconvert>
-class LocalKey : public Key
+template<typename T, auto topaserk, auto frompaserk, auto fnconvert>
+class LocalKeyPaserkImpl : public Key
 {
 public:
-    LocalKey()
-    {
-        _required_length = key_length;
-        _key_type = key_type;
-        _is_loaded = false;
-    }
-
     std::string toPaserk() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.local.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
+            fmt::format("k{}.local.", KeyTypeVersion(this->keyType())), NULL, 0, NULL);
     }
-
     void fromPaserk(const std::string &paserk) override
     {
         loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.local.", KeyTypeVersion(_key_type)),
+            fmt::format("k{}.local.", KeyTypeVersion(this->keyType())),
             paserk, NULL, 0);
 
-        _is_loaded = true;
+        this->_is_loaded = true;
     }
 
     std::string toPaserkId() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.lid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
+            fmt::format("k{}.lid.", KeyTypeVersion(this->keyType())), NULL, 0, NULL);
     }
 
     std::string paserkSeal(const binary_view &pk) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.seal.", KeyTypeVersion(_key_type)), pk.data(), pk.size(), NULL);
+            fmt::format("k{}.seal.", KeyTypeVersion(this->keyType())), pk.data(), pk.size(), NULL);
     }
 
-    std::string paserkSeal(Key * public_key) override
+    std::string paserkSeal(Key *public_key) override
     {
         if (public_key == NULL)
             throw UnexpectedException("unexpected: a public_key must be provided");
 
         // Only public keys of the same version are allowed
         // Although technically v2 and v4 are interchangeable
-        if (KeyTypeVersion(_key_type) != KeyTypeVersion(public_key->keyType()))
+        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(public_key->keyType()))
             throw UnexpectedException(
                 fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
-                    KeyTypeVersion(public_key->keyType()), KeyTypeVersion(_key_type)));
+                    KeyTypeVersion(public_key->keyType()), KeyTypeVersion(this->keyType())));
         if (strcmp(KeyTypePurpose(public_key->keyType()), "public") != 0)
             throw UnexpectedException(
                 fmt::format("unexpected: must be a public key: actual:{}",
@@ -843,10 +856,10 @@ public:
     void paserkUnseal(const std::string &paserk, const binary_view &sk) override
     {
         loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.seal.", KeyTypeVersion(_key_type)),
+            fmt::format("k{}.seal.", KeyTypeVersion(this->keyType())),
             paserk, sk.data(), sk.size());
 
-        _is_loaded = true;
+        this->_is_loaded = true;
     }
 
     void paserkUnseal(const std::string &paserk, Key * secret_key) override
@@ -856,10 +869,10 @@ public:
 
         // Only secret keys of the same version are allowed
         // Although technically v2 and v4 are interchangeable
-        if (KeyTypeVersion(_key_type) != KeyTypeVersion(secret_key->keyType()))
+        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(secret_key->keyType()))
             throw UnexpectedException(
                 fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
-                    KeyTypeVersion(secret_key->keyType()), KeyTypeVersion(_key_type)));
+                    KeyTypeVersion(secret_key->keyType()), KeyTypeVersion(this->keyType())));
         if (strcmp(KeyTypePurpose(secret_key->keyType()), "secret") != 0)
             throw UnexpectedException(
                 fmt::format("unexpected: must be a secret key: actual:{}",
@@ -873,22 +886,64 @@ public:
     std::string paserkWrap(const binary_view &wk) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
+            fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(this->keyType())), wk.data(), wk.size(), NULL);
+    }
+
+    std::string paserkWrap(Key *local_key) override
+    {
+        if (local_key == NULL)
+            throw UnexpectedException("unexpected: a local_key must be provided");
+
+        // Only local keys of the same version are allowed
+        // Although technically v2 and v4 are interchangeable
+        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(local_key->keyType()))
+            throw UnexpectedException(
+                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
+                    KeyTypeVersion(local_key->keyType()), KeyTypeVersion(this->keyType())));
+        if (strcmp(KeyTypePurpose(local_key->keyType()), "local") != 0)
+            throw UnexpectedException(
+                fmt::format("unexpected: must be a local key: actual:{}",
+                    KeyTypePurpose(local_key->keyType())));
+
+        local_key->checkKey();
+
+        return paserkWrap(binary_view(local_key->data(), local_key->size()));
     }
 
     void paserkUnwrap(const std::string &paserk, const binary_view &wk) override
     {
         loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)),
+            fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(this->keyType())),
             paserk, wk.data(), wk.size());
 
-        _is_loaded = true;
+        this->_is_loaded = true;
+    }
+
+    void paserkUnwrap(const std::string &paserk, Key *local_key) override
+    {
+        if (local_key == NULL)
+            throw UnexpectedException("unexpected: a local_key must be provided");
+
+        // Only local keys of the same version are allowed
+        // Although technically v2 and v4 are interchangeable
+        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(local_key->keyType()))
+            throw UnexpectedException(
+                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
+                    KeyTypeVersion(local_key->keyType()), KeyTypeVersion(this->keyType())));
+        if (strcmp(KeyTypePurpose(local_key->keyType()), "local") != 0)
+            throw UnexpectedException(
+                fmt::format("unexpected: must be a local key: actual:{}",
+                    KeyTypePurpose(local_key->keyType())));
+
+        local_key->checkKey();
+
+        paserkUnwrap(paserk, binary_view(local_key->data(), local_key->size()));
     }
 
     std::string paserkPasswordWrap(const std::string &pw, struct PasswordParams *opts) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
+            fmt::format("k{}.local-pw.", KeyTypeVersion(this->keyType())),
                 reinterpret_cast<const uint8_t *>(pw.data()), pw.size(), fnconvert(opts));
     }
 
@@ -896,10 +951,24 @@ public:
     void paserkPasswordUnwrap(const std::string &paserk, const std::string &password) override
     {
         loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
+            fmt::format("k{}.local-pw.", KeyTypeVersion(this->keyType())),
             paserk, reinterpret_cast<const uint8_t *>(password.data()), password.length());
 
-        _is_loaded = true;
+        this->_is_loaded = true;
+    }
+};
+
+
+template<typename T, enum KeyType key_type, size_t key_length,
+         auto fencrypt, auto fdecrypt, auto topaserk, auto frompaserk, auto fnconvert>
+class LocalKey : public LocalKeyPaserkImpl<T, topaserk, frompaserk, fnconvert>
+{
+public:
+    LocalKey()
+    {
+        this->_required_length = key_length;
+        this->_key_type = key_type;
+        this->_is_loaded = false;
     }
 
     // A base64 encoded string is returned
@@ -908,7 +977,7 @@ public:
                 const binary_view &footer = binary::none,
                 const binary_view &implicit_assertion = binary::none) const override
     {
-        checkKey();
+        this->checkKey();
 
         if (implicit_assertion.length() > 0)
             throw UnsupportedException(
@@ -919,7 +988,7 @@ public:
             { paseto_free(result);  });
 
         result = fencrypt(payload.data(), payload.size(),
-                          _data.data(),
+                          this->_data.data(),
                           footer.data(), footer.size());
         if (result == NULL)
             throw UnexpectedException(
@@ -933,7 +1002,7 @@ public:
                 const std::string_view &token,
                 const binary_view &implicit_assertion = binary::none) const override
     {
-        checkKey();
+        this->checkKey();
 
         if (implicit_assertion.length() > 0)
             throw UnsupportedException(
@@ -946,13 +1015,13 @@ public:
             { paseto_free(footer); paseto_free(result);  });
 
         result = fdecrypt(token.data(), &message_len,
-                          _data.data(),
+                          this->_data.data(),
                           &footer, &footer_len);
         if (result == NULL)
             throw UnexpectedException(
                 fmt::format("Unexpected: {}({}) (line {})",
                     std::strerror(errno), errno, __LINE__));
-        return Token(_key_type, result, message_len, footer, footer_len);
+        return Token(this->keyType(), result, message_len, footer, footer_len);
     }
 
 protected:
@@ -960,28 +1029,20 @@ protected:
 };
 
 
-template<typename T, enum KeyType key_type, size_t key_length,
-         auto fverify, auto topaserk, auto frompaserk, auto fnconvert>
-class PublicKey : public Key
+template<typename T, auto topaserk, auto frompaserk, auto fnconvert>
+class PublicKeyPaserkImpl : public Key
 {
 public:
-    PublicKey()
-    {
-        _required_length = key_length;
-        _key_type = key_type;
-        _is_loaded = false;
-    }
-
     std::string toPaserk() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.public.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
+            fmt::format("k{}.public.", KeyTypeVersion(this->keyType())), NULL, 0, NULL);
     }
 
     void fromPaserk(const std::string &paserk) override
     {
         loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.public.", KeyTypeVersion(_key_type)),
+            fmt::format("k{}.public.", KeyTypeVersion(this->keyType())),
             paserk, NULL, 0);
 
         _is_loaded = true;
@@ -990,14 +1051,29 @@ public:
     std::string toPaserkId() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.pid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
+            fmt::format("k{}.pid.", KeyTypeVersion(this->keyType())), NULL, 0, NULL);
+    }
+
+};
+
+
+template<typename T, enum KeyType key_type, size_t key_length,
+         auto fverify, auto topaserk, auto frompaserk, auto fnconvert>
+class PublicKey : public PublicKeyPaserkImpl<T, topaserk, frompaserk, fnconvert>
+{
+public:
+    PublicKey()
+    {
+        this->_required_length = key_length;
+        this->_key_type = key_type;
+        this->_is_loaded = false;
     }
 
     Token verify(
                 const std::string_view &token,
                 const binary_view &implicit_assertion = binary::none) const override
     {
-        checkKey();
+        this->checkKey();
 
         if (implicit_assertion.length() > 0)
             throw UnsupportedException(
@@ -1010,82 +1086,130 @@ public:
             { paseto_free(footer); paseto_free(result);  });
 
         result = fverify(token.data(), &message_len,
-                          _data.data(),
+                          this->_data.data(),
                           &footer, &footer_len);
         if (result == NULL)
             throw UnexpectedException(
                 fmt::format("Unexpected: {}({}) (line {})",
                     std::strerror(errno), errno, __LINE__));
-        return Token(_key_type, result, message_len, footer, footer_len);
+        return Token(this->keyType(), result, message_len, footer, footer_len);
     }
 
 protected:
 };
 
 
-template<typename T, enum KeyType key_type, size_t key_length,
-         auto fsign, auto topaserk, auto frompaserk, auto fnconvert>
-class SecretKey : public Key
+template<typename T, auto topaserk, auto frompaserk, auto fnconvert>
+class SecretKeyPaserkImpl : public Key
 {
 public:
-    SecretKey()
-    {
-        _required_length = key_length;
-        _key_type = key_type;
-        _is_loaded = false;
-    }
-
     std::string toPaserk() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.secret.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
+            fmt::format("k{}.secret.", KeyTypeVersion(this->keyType())), NULL, 0, NULL);
     }
 
     void fromPaserk(const std::string &paserk) override
     {
         loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.secret.", KeyTypeVersion(_key_type)),
+            fmt::format("k{}.secret.", KeyTypeVersion(this->keyType())),
             paserk, NULL, 0);
 
-        _is_loaded = true;
+        this->_is_loaded = true;
     }
 
     std::string toPaserkId() override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.sid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
+            fmt::format("k{}.sid.", KeyTypeVersion(this->keyType())), NULL, 0, NULL);
     }
 
     std::string paserkWrap(const binary_view &wk) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
+            fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(this->keyType())), wk.data(), wk.size(), NULL);
+    }
+
+    std::string paserkWrap(Key *local_key) override
+    {
+        if (local_key == NULL)
+            throw UnexpectedException("unexpected: a local_key must be provided");
+
+        // Only local keys of the same version are allowed
+        // Although technically v2 and v4 are interchangeable
+        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(local_key->keyType()))
+            throw UnexpectedException(
+                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
+                    KeyTypeVersion(local_key->keyType()), KeyTypeVersion(this->keyType())));
+        if (strcmp(KeyTypePurpose(local_key->keyType()), "local") != 0)
+            throw UnexpectedException(
+                fmt::format("unexpected: must be a local key: actual:{}",
+                    KeyTypePurpose(local_key->keyType())));
+
+        local_key->checkKey();
+
+        return paserkWrap(binary_view(local_key->data(), local_key->size()));
     }
 
     void paserkUnwrap(const std::string &paserk, const binary_view &wk) override
     {
         loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)),
+            fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(this->keyType())),
             paserk, wk.data(), wk.size());
 
-        _is_loaded = true;
+        this->_is_loaded = true;
+    }
+
+    void paserkUnwrap(const std::string &paserk, Key *local_key) override
+    {
+        if (local_key == NULL)
+            throw UnexpectedException("unexpected: a local_key must be provided");
+
+        // Only local keys of the same version are allowed
+        // Although technically v2 and v4 are interchangeable
+        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(local_key->keyType()))
+            throw UnexpectedException(
+                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
+                    KeyTypeVersion(local_key->keyType()), KeyTypeVersion(this->keyType())));
+        if (strcmp(KeyTypePurpose(local_key->keyType()), "local") != 0)
+            throw UnexpectedException(
+                fmt::format("unexpected: must be a local key: actual:{}",
+                    KeyTypePurpose(local_key->keyType())));
+
+        local_key->checkKey();
+
+        paserkUnwrap(paserk, binary_view(local_key->data(), local_key->size()));
     }
 
     std::string paserkPasswordWrap(const std::string &pw, struct PasswordParams *opts) override
     {
         return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
+            fmt::format("k{}.secret-pw.", KeyTypeVersion(this->keyType())),
                 reinterpret_cast<const uint8_t *>(pw.data()), pw.size(), fnconvert(opts));
     }
-
 
     void paserkPasswordUnwrap(const std::string &paserk, const std::string &password) override
     {
         loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
+            fmt::format("k{}.secret-pw.", KeyTypeVersion(this->keyType())),
             paserk, reinterpret_cast<const uint8_t *>(password.data()), password.length());
 
-        _is_loaded = true;
+        this->_is_loaded = true;
+    }
+
+};
+
+
+template<typename T, enum KeyType key_type, size_t key_length,
+         auto fsign, auto topaserk, auto frompaserk, auto fnconvert>
+class SecretKey : public SecretKeyPaserkImpl<T, topaserk, frompaserk, fnconvert>
+{
+public:
+    SecretKey()
+    {
+        this->_required_length = key_length;
+        this->_key_type = key_type;
+        this->_is_loaded = false;
     }
 
     std::string sign(
@@ -1093,7 +1217,7 @@ public:
                 const binary_view &footer = binary::none,
                 const binary_view &implicit_assertion = binary::none) const override
     {
-        checkKey();
+        this->checkKey();
 
         if (implicit_assertion.length() > 0)
             throw UnsupportedException(
@@ -1104,7 +1228,7 @@ public:
             { paseto_free(result);  });
 
         result = fsign(payload.data(), payload.size(),
-                       _data.data(),
+                       this->_data.data(),
                        footer.data(), footer.size());
         if (result == NULL)
             throw UnexpectedException(
@@ -1121,125 +1245,15 @@ protected:
 
 template<typename T, enum KeyType key_type, size_t key_length,
          auto fencrypt, auto fdecrypt, auto topaserk, auto frompaserk, auto fnconvert>
-class LocalKey2 : public Key
+class LocalKey2 : public LocalKeyPaserkImpl<T, topaserk, frompaserk, fnconvert>
 {
 public:
     LocalKey2()
     {
-        _required_length = key_length;
-        _key_type = key_type;
-        _is_loaded = false;
+        this->_required_length = key_length;
+        this->_key_type = key_type;
+        this->_is_loaded = false;
     }
-
-    std::string toPaserk() override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.local.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
-    }
-
-    void fromPaserk(const std::string &paserk) override
-    {
-        loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.local.", KeyTypeVersion(_key_type)),
-            paserk, NULL, 0);
-
-        _is_loaded = true;
-    }
-
-    std::string toPaserkId() override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.lid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
-    }
-
-    std::string paserkSeal(const binary_view &pk) override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.seal.", KeyTypeVersion(_key_type)), pk.data(), pk.size(), NULL);
-    }
-
-    std::string paserkSeal(Key * public_key) override
-    {
-        if (public_key == NULL)
-            throw UnexpectedException("unexpected: a public_key must be provided");
-
-        // Only public keys of the same version are allowed
-        // Although technically v2 and v4 are interchangeable
-        if (KeyTypeVersion(_key_type) != KeyTypeVersion(public_key->keyType()))
-            throw UnexpectedException(
-                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
-                    KeyTypeVersion(public_key->keyType()), KeyTypeVersion(_key_type)));
-        if (strcmp(KeyTypePurpose(public_key->keyType()), "public") != 0)
-            throw UnexpectedException(
-                fmt::format("unexpected: must be a public key: actual:{}",
-                    KeyTypePurpose(public_key->keyType())));
-
-        public_key->checkKey();
-        return paserkSeal(binary_view(public_key->data(), public_key->size()));
-    }
-
-    void paserkUnseal(const std::string &paserk, const binary_view &sk) override
-    {
-        loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.seal.", KeyTypeVersion(_key_type)),
-            paserk, sk.data(), sk.size());
-
-        _is_loaded = true;
-    }
-
-    void paserkUnseal(const std::string &paserk, Key * secret_key) override
-    {
-        if (secret_key == NULL)
-            throw UnexpectedException("unexpected: a secret_key must be provided");
-
-        // Only secret keys of the same version are allowed
-        // Although technically v2 and v4 are interchangeable
-        if (KeyTypeVersion(_key_type) != KeyTypeVersion(secret_key->keyType()))
-            throw UnexpectedException(
-                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
-                    KeyTypeVersion(secret_key->keyType()), KeyTypeVersion(_key_type)));
-        if (strcmp(KeyTypePurpose(secret_key->keyType()), "secret") != 0)
-            throw UnexpectedException(
-                fmt::format("unexpected: must be a secret key: actual:{}",
-                    KeyTypePurpose(secret_key->keyType())));
-
-        secret_key->checkKey();
-
-        paserkUnseal(paserk, binary_view(secret_key->data(), secret_key->size()));
-    }
-
-    std::string paserkWrap(const binary_view &wk) override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
-    }
-
-    void paserkUnwrap(const std::string &paserk, const binary_view &wk) override
-    {
-        loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.local-wrap.pie.", KeyTypeVersion(_key_type)),
-            paserk, wk.data(), wk.size());
-
-        _is_loaded = true;
-    }
-
-    std::string paserkPasswordWrap(const std::string &pw, struct PasswordParams *opts) override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
-                reinterpret_cast<const uint8_t *>(pw.data()), pw.size(), fnconvert(opts));
-    }
-
-
-    void paserkPasswordUnwrap(const std::string &paserk, const std::string &password) override
-    {
-        loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.local-pw.", KeyTypeVersion(_key_type)),
-            paserk, reinterpret_cast<const uint8_t *>(password.data()), password.length());
-
-        _is_loaded = true;
-    }
-
 
     // A base64 encoded string is returned
     std::string encrypt(
@@ -1247,17 +1261,17 @@ public:
                 const binary_view &footer = binary::none,
                 const binary_view &implicit_assertion = binary::none) const override
     {
-        checkKey();
+        this->checkKey();
 
         char * result = nullptr;
         auto guard = paseto::on_scope_exit( [&]()
             { paseto_free(result);  });
 
         result = fencrypt(payload.data(), payload.size(),
-                          _data.data(),
+                          this->_data.data(),
                           footer.data(), footer.size(),
                           implicit_assertion.data(), implicit_assertion.size(),
-                          _nonce.data(), _nonce.size());
+                          this->_nonce.data(), this->_nonce.size());
         if (result == NULL)
             throw UnexpectedException(
                 fmt::format("Unexpected: {}({}) (line {})",
@@ -1270,7 +1284,7 @@ public:
                 const std::string_view &token,
                 const binary_view &implicit_assertion = binary::none) const override
     {
-        checkKey();
+        this->checkKey();
 
         size_t message_len = 0, footer_len = 0;
         uint8_t *footer = nullptr;
@@ -1279,56 +1293,35 @@ public:
             { paseto_free(footer); paseto_free(result);  });
 
         result = fdecrypt(token.data(), &message_len,
-                          _data.data(),
+                          this->_data.data(),
                           &footer, &footer_len,
                           implicit_assertion.data(), implicit_assertion.size());
         if (result == NULL)
             throw UnexpectedException(
                 fmt::format("Unexpected: {}({}) (line {})",
                     std::strerror(errno), errno, __LINE__));
-        return Token(_key_type, result, message_len, footer, footer_len);
+        return Token(this->keyType(), result, message_len, footer, footer_len);
     }
 };
 
 
 template<typename T, enum KeyType key_type, size_t key_length,
          auto fverify, auto topaserk, auto frompaserk, auto fnconvert>
-class PublicKey2 : public Key
+class PublicKey2 : public PublicKeyPaserkImpl<T, topaserk, frompaserk, fnconvert>
 {
 public:
     PublicKey2()
     {
-        _required_length = key_length;
-        _key_type = key_type;
-        _is_loaded = false;
-    }
-
-    std::string toPaserk() override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.public.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
-    }
-
-    void fromPaserk(const std::string &paserk) override
-    {
-        loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.public.", KeyTypeVersion(_key_type)),
-            paserk, NULL, 0);
-
-        _is_loaded = true;
-    }
-
-    std::string toPaserkId() override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.pid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
+        this->_required_length = key_length;
+        this->_key_type = key_type;
+        this->_is_loaded = false;
     }
 
     Token verify(
                 const std::string_view &token,
                 const binary_view &implicit_assertion = binary::none) const override
     {
-        checkKey();
+        this->checkKey();
 
         size_t message_len = 0, footer_len = 0;
         uint8_t *footer = nullptr;
@@ -1337,97 +1330,43 @@ public:
             { paseto_free(footer); paseto_free(result);  });
 
         result = fverify(token.data(), &message_len,
-                          _data.data(),
+                          this->_data.data(),
                           &footer, &footer_len,
                           implicit_assertion.data(), implicit_assertion.size());
         if (result == NULL)
             throw UnexpectedException(
                 fmt::format("Unexpected: {}({}) (line {})",
                     std::strerror(errno), errno, __LINE__));
-        return Token(_key_type, result, message_len, footer, footer_len);
+        return Token(this->keyType(), result, message_len, footer, footer_len);
     }
 };
 
 
 template<typename T, enum KeyType key_type, size_t key_length,
          auto fsign, auto topaserk, auto frompaserk, auto fnconvert>
-class SecretKey2 : public Key
+class SecretKey2 : public SecretKeyPaserkImpl<T, topaserk, frompaserk, fnconvert>
 {
 public:
     SecretKey2()
     {
-        _required_length = key_length;
-        _key_type = key_type;
-        _is_loaded = false;
+        this->_required_length = key_length;
+        this->_key_type = key_type;
+        this->_is_loaded = false;
     }
-
-    std::string toPaserk() override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.secret.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
-    }
-
-    void fromPaserk(const std::string &paserk) override
-    {
-        loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.secret.", KeyTypeVersion(_key_type)),
-            paserk, NULL, 0);
-
-        _is_loaded = true;
-    }
-
-    std::string toPaserkId() override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.sid.", KeyTypeVersion(_key_type)), NULL, 0, NULL);
-    }
-
-    std::string paserkWrap(const binary_view &wk) override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)), wk.data(), wk.size(), NULL);
-    }
-
-    void paserkUnwrap(const std::string &paserk, const binary_view &wk) override
-    {
-        loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.secret-wrap.pie.", KeyTypeVersion(_key_type)),
-            paserk, wk.data(), wk.size());
-
-        _is_loaded = true;
-    }
-
-    std::string paserkPasswordWrap(const std::string &pw, struct PasswordParams *opts) override
-    {
-        return buildPaserk<T, topaserk>(this,
-            fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
-                reinterpret_cast<const uint8_t *>(pw.data()), pw.size(), fnconvert(opts));
-    }
-
-
-    void paserkPasswordUnwrap(const std::string &paserk, const std::string &password) override
-    {
-        loadPaserk<T, frompaserk>(this,
-            fmt::format("k{}.secret-pw.", KeyTypeVersion(_key_type)),
-            paserk, reinterpret_cast<const uint8_t *>(password.data()), password.length());
-
-        _is_loaded = true;
-    }
-
 
     std::string sign(
                 const binary_view &payload,
                 const binary_view &footer = binary::none,
                 const binary_view &implicit_assertion = binary::none) const override
     {
-        checkKey();
+        this->checkKey();
 
         char * result = nullptr;
         auto guard = paseto::on_scope_exit( [&]()
             { paseto_free(result);  });
 
         result = fsign(payload.data(), payload.size(),
-                       _data.data(),
+                       this->_data.data(),
                        footer.data(), footer.size(),
                        implicit_assertion.data(), implicit_assertion.size());
         if (result == NULL)
@@ -1608,12 +1547,13 @@ std::pair<std::unique_ptr<Key>, std::unique_ptr<Key>> generateKeyPair(const bina
             binPublic.data(), binPublic.size(),
             binSecret.data(), binSecret.size()))
         throw UnexpectedException(
-                fmt::format("Unexpected: key generation failed {}({}) (line {})",
+                fmt::format("Unexpected: key generation failed: {} {}({}) (line {})",
+                    KeyTypeToString(kt),
                     std::strerror(errno), errno, __LINE__));
 
     return std::make_pair(
-                Keys::loadFromBinary(KeyType::V4_PUBLIC, binPublic),
-                Keys::loadFromBinary(KeyType::V4_SECRET, binSecret));
+                Keys::loadFromBinary(kt, binPublic),
+                Keys::loadFromBinary(getRelatedSecretKeyType(kt), binSecret));
 }
 
 template<KeyType kt, size_t secret_size>
@@ -1651,7 +1591,7 @@ public:
     }
 
     static std::pair<std::unique_ptr<Key>, std::unique_ptr<Key>> generatePair(KeyType kt,
-        const binary_view &seed)
+        const binary_view &seed = binary::none)
     {
         switch (kt)
         {
