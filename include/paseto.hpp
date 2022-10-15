@@ -566,7 +566,7 @@ public:
                 KeyTypeToString(_key_type), __LINE__));
     }
 
-    virtual std::string paserkWrap(Key * local_key)
+    virtual std::string paserkWrap(Key *local_key)
     {
         throw InvalidKeyException(
             fmt::format("InvalidKey: only LOCAL/SECRET keys are allowed:{} (line {})",
@@ -606,7 +606,7 @@ public:
                 KeyTypeToString(_key_type), __LINE__));
     }
 
-    virtual void paserkUnwrap(const std::string &paserk, Key * local_key)
+    virtual void paserkUnwrap(const std::string &paserk, Key *local_key)
     {
         throw InvalidKeyException(
             fmt::format("InvalidKey: only LOCAL/SECRET keys are allowed:{} (line {})",
@@ -862,7 +862,7 @@ public:
         this->_is_loaded = true;
     }
 
-    void paserkUnseal(const std::string &paserk, Key * secret_key) override
+    void paserkUnseal(const std::string &paserk, Key *secret_key) override
     {
         if (secret_key == NULL)
             throw UnexpectedException("unexpected: a secret_key must be provided");
