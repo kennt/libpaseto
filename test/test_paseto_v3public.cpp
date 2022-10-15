@@ -13,18 +13,18 @@ using std::string_view;
 
 #include <catch2/catch_test_macros.hpp>
 
-static string paserk_public = "k2.public.";
-static string paserk_pid = "k2.pid.";
+static string paserk_public = "k3.public.";
+static string paserk_pid = "k3.pid.";
 
 // basic use case
-TEST_CASE("paseto_v2public_basic", "[paseto_v2public]")
+TEST_CASE("paseto_v3public_basic", "[paseto_v3public]")
 {
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
-    REQUIRE( public_key->keyType() == paseto::KeyType::V2_PUBLIC );
-    REQUIRE( public_key->size() == paseto_v2_PUBLIC_PUBLICKEYBYTES );
-    REQUIRE( public_key->required_length() == paseto_v2_PUBLIC_PUBLICKEYBYTES );
+    REQUIRE( public_key->keyType() == paseto::KeyType::V3_PUBLIC );
+    REQUIRE( public_key->size() == paseto_v3_PUBLIC_PUBLICKEYBYTES );
+    REQUIRE( public_key->required_length() == paseto_v3_PUBLIC_PUBLICKEYBYTES );
     REQUIRE( public_key->is_loaded() );
 
     string data {"test data"};
@@ -35,10 +35,10 @@ TEST_CASE("paseto_v2public_basic", "[paseto_v2public]")
 }
 
 
-TEST_CASE("paseto_v2public_unsupported_apis", "[paseto_v2public]")
+TEST_CASE("paseto_v3public_unsupported_apis", "[paseto_v3public]")
 {
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
     string data {"test data"};
 
@@ -46,46 +46,51 @@ TEST_CASE("paseto_v2public_unsupported_apis", "[paseto_v2public]")
     REQUIRE_THROWS( public_key->decrypt(data) );
     REQUIRE_THROWS( public_key->sign(data) );
 
-    REQUIRE_THROWS( paseto::KeyGen::generate(paseto::KeyType::V2_PUBLIC) );
+    REQUIRE_THROWS( paseto::KeyGen::generate(paseto::KeyType::V3_PUBLIC) );
 }
 
 
-TEST_CASE("paseto_v2public_implicitassertion", "[paseto_v2public]")
+TEST_CASE("paseto_v3public_implicitassertion", "[paseto_v3public]")
 {
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
     string data {"test data"};
+    string footer {"footer data"};
     string implicit_assertion{"implicit data"};
 
-    // v2 doesn't support implicit assertions
-    auto signed_data = secret_key->sign(data);
-    REQUIRE_THROWS( public_key->verify(signed_data, implicit_assertion) );
+    auto signed_data = secret_key->sign(data, footer, implicit_assertion);
+    auto token = public_key->verify(signed_data, implicit_assertion);
+
+    REQUIRE( token.payload().toString() == data );
+    REQUIRE( token.footer().toString() == footer );
+
+    REQUIRE_THROWS( public_key->verify(signed_data) );
 }
 
 
-TEST_CASE("paseto_v2public_loadFrom", "[paseto_v2public]")
+TEST_CASE("paseto_v3public_loadFrom", "[paseto_v3public]")
 {
     string data {"test data"};
 
     // Test the various loadFrom calls
-    uint8_t binary_data[paseto_v2_PUBLIC_PUBLICKEYBYTES+1];
+    uint8_t binary_data[paseto_v3_PUBLIC_PUBLICKEYBYTES+1];
     randombytes_buf(binary_data, sizeof(binary_data));
 
     // loadFromBinary
     {
-        auto key = paseto::Keys::loadFromBinary(paseto::KeyType::V2_PUBLIC,
-           paseto::binary_view(binary_data, paseto_v2_PUBLIC_PUBLICKEYBYTES));
+        auto key = paseto::Keys::loadFromBinary(paseto::KeyType::V3_PUBLIC,
+           paseto::binary_view(binary_data, paseto_v3_PUBLIC_PUBLICKEYBYTES));
 
         // length-testing
-        for (size_t i=0; i<paseto_v2_PUBLIC_PUBLICKEYBYTES; i++)
+        for (size_t i=0; i<paseto_v3_PUBLIC_PUBLICKEYBYTES; i++)
         {
             REQUIRE_THROWS( paseto::Keys::loadFromBinary(
-                paseto::KeyType::V2_PUBLIC,
+                paseto::KeyType::V3_PUBLIC,
                 paseto::binary_view(binary_data, i)) );
         }
         REQUIRE_THROWS( paseto::Keys::loadFromBinary(
-                paseto::KeyType::V2_PUBLIC,
+                paseto::KeyType::V3_PUBLIC,
                 paseto::binary_view(binary_data, sizeof(binary_data))) );
     }
 
@@ -93,18 +98,18 @@ TEST_CASE("paseto_v2public_loadFrom", "[paseto_v2public]")
     {
         char hex_data[2*sizeof(binary_data)+1];
         save_hex(hex_data, sizeof(hex_data), binary_data, sizeof(binary_data));
-        auto key = paseto::Keys::loadFromHex(paseto::KeyType::V2_PUBLIC,
-                    string_view(hex_data, 2*paseto_v2_PUBLIC_PUBLICKEYBYTES));
+        auto key = paseto::Keys::loadFromHex(paseto::KeyType::V3_PUBLIC,
+                    string_view(hex_data, 2*paseto_v3_PUBLIC_PUBLICKEYBYTES));
 
         // length-testing
-        for (size_t i=0; i<paseto_v2_PUBLIC_PUBLICKEYBYTES; i++)
+        for (size_t i=0; i<paseto_v3_PUBLIC_PUBLICKEYBYTES; i++)
         {
             REQUIRE_THROWS( paseto::Keys::loadFromHex(
-                paseto::KeyType::V2_PUBLIC,
+                paseto::KeyType::V3_PUBLIC,
                 string_view(hex_data, 2*i)) );
         }
         REQUIRE_THROWS( paseto::Keys::loadFromHex(
-                paseto::KeyType::V2_PUBLIC,
+                paseto::KeyType::V3_PUBLIC,
                 string_view(hex_data, sizeof(hex_data)-1)) );
     }
 
@@ -113,8 +118,8 @@ TEST_CASE("paseto_v2public_loadFrom", "[paseto_v2public]")
         char base64_data[2*sizeof(binary_data)];
         size_t len = 0;
         REQUIRE( save_base64(base64_data, sizeof(base64_data), &len,
-                       binary_data, paseto_v2_PUBLIC_PUBLICKEYBYTES) );
-        auto key = paseto::Keys::loadFromBase64(paseto::KeyType::V2_PUBLIC,
+                       binary_data, paseto_v3_PUBLIC_PUBLICKEYBYTES) );
+        auto key = paseto::Keys::loadFromBase64(paseto::KeyType::V3_PUBLIC,
                     string_view(base64_data, len));
 
         // try substring
@@ -123,7 +128,7 @@ TEST_CASE("paseto_v2public_loadFrom", "[paseto_v2public]")
             save_base64(base64_data, sizeof(base64_data), &len,
                         binary_data, i);
             REQUIRE_THROWS( paseto::Keys::loadFromBase64(
-                                paseto::KeyType::V2_PUBLIC,
+                                paseto::KeyType::V3_PUBLIC,
                                 std::string_view(base64_data, len)
                                 ));
         }
@@ -131,38 +136,41 @@ TEST_CASE("paseto_v2public_loadFrom", "[paseto_v2public]")
         save_base64(base64_data, sizeof(base64_data), &len,
                     binary_data, sizeof(binary_data));
         REQUIRE_THROWS( paseto::Keys::loadFromBase64(
-                            paseto::KeyType::V2_PUBLIC,
+                            paseto::KeyType::V3_PUBLIC,
                             std::string_view(base64_data, len)
                             ));
     }
 
-    // loadFromPem (not supported for v2)
+    // loadFromPem (not supported for v3)
     {
         string pem_public_key = "-----BEGIN PUBLIC KEY-----\nMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+R+5k0jso3yCw7Urmr2X2pSN3aDPKUVJ\nW08zcmC6jPYlZmo6XNCUV7yrgbRrWIu2H7fnqha+gbsxq3W+Gdb5L0XCOdOJtKio\nhM44YuruLDYM1tt661ZEWJG9qBN0iT5K\n-----END PUBLIC KEY-----";
+        string pem_secret_key = "-----BEGIN EC PRIVATE KEY-----\nMIGkAgEBBDAhUb6WGhABE1MTj0x7E/5acgyap23kh7hUAVoAavKyfhYcmI3n1Q7L\nJpHxNb792H6gBwYFK4EEACKhZANiAAT5H7mTSOyjfILDtSuavZfalI3doM8pRUlb\nTzNyYLqM9iVmajpc0JRXvKuBtGtYi7Yft+eqFr6BuzGrdb4Z1vkvRcI504m0qKiE\nzjhi6u4sNgzW23rrVkRYkb2oE3SJPko=\n-----END EC PRIVATE KEY-----";
 
         REQUIRE_THROWS( paseto::Keys::loadFromPem(
-            paseto::KeyType::V2_PUBLIC,
-            pem_public_key) );
+                            paseto::KeyType::V3_PUBLIC,
+                            pem_secret_key) );
+
+        auto pem_key = paseto::Keys::loadFromPem(
+                            paseto::KeyType::V3_PUBLIC,
+                            pem_public_key);
     }
 }
 
 
-TEST_CASE("paseto_v2public_lucidity", "[paseto_v2public]")
+TEST_CASE("paseto_v3public_lucidity", "[paseto_v3public]")
 {
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
-    auto local_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
-
-    string data {"test data"};
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
+    auto local_key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
     {
-        auto sealed_data = local_key->paserkSeal(public_key.get());    
+        auto sealed_data = local_key->paserkSeal(public_key.get());
         REQUIRE_THROWS( public_key->paserkSeal(public_key.get()) );
         REQUIRE_THROWS( public_key->paserkUnseal(sealed_data, secret_key.get()) );
     }
 
     {
-        auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+        auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
         auto wrapped_data = local_key->paserkWrap(wrapping_key.get());
         REQUIRE_THROWS( public_key->paserkWrap(wrapping_key.get()) );
         REQUIRE_THROWS( public_key->paserkUnwrap(wrapped_data, wrapping_key.get()) );
@@ -171,9 +179,7 @@ TEST_CASE("paseto_v2public_lucidity", "[paseto_v2public]")
     {
         string password {"password"};
         struct paseto::PasswordParams opts;
-            opts.params.v2.time = 1024;
-            opts.params.v2.memory = 65536;
-            opts.params.v2.parallelism = 1;
+            opts.params.v3.iterations = 10000;
         auto password_wrapped_data = local_key->paserkPasswordWrap(password, &opts);
         REQUIRE_THROWS( public_key->paserkPasswordWrap(password, &opts) );
         REQUIRE_THROWS( public_key->paserkPasswordUnwrap(password_wrapped_data, password) );

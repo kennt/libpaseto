@@ -152,6 +152,12 @@ add_executable(pasetocpptests
 	test/test_paserk_v2public.cpp
 	test/test_paseto_v2secret.cpp
 	test/test_paserk_v2secret.cpp
+	test/test_paseto_v3local.cpp
+	test/test_paserk_v3local.cpp
+	test/test_paseto_v3public.cpp
+	test/test_paserk_v3public.cpp
+	test/test_paseto_v3secret.cpp
+	test/test_paserk_v3secret.cpp
 	)
 target_link_libraries(pasetocpptests
 	PRIVATE

@@ -26,8 +26,7 @@ TEST_CASE("paseto_v2secret_basic", "[paseto_v2secret]")
     REQUIRE( secret_key->is_loaded() );
 
     string data {"test data"};
-    paseto::binary_view data_view(data);
-    auto signed_data = secret_key->sign(data_view);
+    auto signed_data = secret_key->sign(data);
 
     // check that the verification works
     auto verified_token = public_key->verify(signed_data);
@@ -40,10 +39,9 @@ TEST_CASE("paseto_v2secret_unsupported_apis", "[paseto_v2secret]")
         paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
 
     string data {"test data"};
-    paseto::binary_view data_view(data);
-    auto signed_data = secret_key->sign(data_view);
+    auto signed_data = secret_key->sign(data);
 
-    REQUIRE_THROWS( secret_key->encrypt(data_view) );
+    REQUIRE_THROWS( secret_key->encrypt(data) );
     REQUIRE_THROWS( secret_key->decrypt(data) );
     REQUIRE_THROWS( secret_key->verify(signed_data) );
 
@@ -59,12 +57,9 @@ TEST_CASE("paseto_v2secret_implicitassertion", "[paseto_v2secret]")
     string data {"test data"};
     string footer {"footer"};
     string implicit_assertion{"implicit data"};
-    paseto::binary_view data_view(data);
 
     // v2 doesn't support implicit assertions
-    REQUIRE_THROWS( secret_key->sign(paseto::binary_view {data},
-                                     paseto::binary_view {footer},
-                                     paseto::binary_view {implicit_assertion}) );
+    REQUIRE_THROWS( secret_key->sign(data, footer, implicit_assertion) );
 }
 
 

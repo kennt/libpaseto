@@ -15,13 +15,13 @@ using std::string_view;
 
 
 // basic use case
-TEST_CASE("paseto_v2local_basic", "[paseto_v2local]")
+TEST_CASE("paseto_v3local_basic", "[paseto_v3local]")
 {
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
-    REQUIRE( key->keyType() == paseto::KeyType::V2_LOCAL );
-    REQUIRE( key->size() == paseto_v2_LOCAL_KEYBYTES );
-    REQUIRE( key->required_length() == paseto_v2_LOCAL_KEYBYTES );
+    REQUIRE( key->keyType() == paseto::KeyType::V3_LOCAL );
+    REQUIRE( key->size() == paseto_v3_LOCAL_KEYBYTES );
+    REQUIRE( key->required_length() == paseto_v3_LOCAL_KEYBYTES );
     REQUIRE( key->is_loaded() );
 
     string data {"test data"};
@@ -39,52 +39,58 @@ TEST_CASE("paseto_v2local_basic", "[paseto_v2local]")
 }
 
 
-TEST_CASE("paseto_v2local_unsupported_apis", "[paseto_v2local]")
+TEST_CASE("paseto_v3local_unsupported_apis", "[paseto_v3local]")
 {
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
     string data {"test data"};
 
     REQUIRE_THROWS( key->sign(data) );
     REQUIRE_THROWS( key->verify(data) );
 
-    REQUIRE_THROWS( paseto::KeyGen::generatePair(paseto::KeyType::V2_LOCAL) );
+    REQUIRE_THROWS( paseto::KeyGen::generatePair(paseto::KeyType::V3_LOCAL) );
 }
 
 
-TEST_CASE("paseto_v2local_implicitassertion", "[paseto_v2local]")
+TEST_CASE("paseto_v3local_implicitassertion", "[paseto_v3local]")
 {
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
     string data {"test data"};
     string footer{"footer data"};
     string implicit_assertion{"implicit data"};
 
-    // v2 doesn't support implicit assertions
-    REQUIRE_THROWS( key->encrypt(data, footer, implicit_assertion) );
+    auto encrypted_data = key->encrypt(data, footer, implicit_assertion);
+    auto token = key->decrypt(encrypted_data, implicit_assertion);
+
+    REQUIRE( token.payload().toString() == data );
+    REQUIRE( token.footer().toString() == footer );
+
+    // decrypt() should fail without the implicit assertion
+    REQUIRE_THROWS( key->decrypt(encrypted_data) );
 }
 
 
-TEST_CASE("paseto_v2local_loadFrom", "[paseto_v2local]")
+TEST_CASE("paseto_v3local_loadFrom", "[paseto_v3local]")
 {
     string data {"test data"};
 
     // Test the various loadFrom calls
-    uint8_t binary_data[paseto_v2_LOCAL_KEYBYTES+1];
+    uint8_t binary_data[paseto_v3_LOCAL_KEYBYTES+1];
     randombytes_buf(binary_data, sizeof(binary_data));
 
     // loadFromBinary
     {
-        auto key = paseto::Keys::loadFromBinary(paseto::KeyType::V2_LOCAL,
-           paseto::binary_view(binary_data, paseto_v2_LOCAL_KEYBYTES));
+        auto key = paseto::Keys::loadFromBinary(paseto::KeyType::V3_LOCAL,
+           paseto::binary_view(binary_data, paseto_v3_LOCAL_KEYBYTES));
 
         // length-testing
-        for (size_t i=0; i<paseto_v2_LOCAL_KEYBYTES; i++)
+        for (size_t i=0; i<paseto_v3_LOCAL_KEYBYTES; i++)
         {
             REQUIRE_THROWS( paseto::Keys::loadFromBinary(
-                paseto::KeyType::V2_LOCAL,
+                paseto::KeyType::V3_LOCAL,
                 paseto::binary_view(binary_data, i)) );
         }
         REQUIRE_THROWS( paseto::Keys::loadFromBinary(
-                paseto::KeyType::V2_LOCAL,
+                paseto::KeyType::V3_LOCAL,
                 paseto::binary_view(binary_data, sizeof(binary_data))) );
     }
 
@@ -92,18 +98,18 @@ TEST_CASE("paseto_v2local_loadFrom", "[paseto_v2local]")
     {
         char hex_data[2*sizeof(binary_data)+1];
         save_hex(hex_data, sizeof(hex_data), binary_data, sizeof(binary_data));
-        auto key = paseto::Keys::loadFromHex(paseto::KeyType::V2_LOCAL,
-                    string_view(hex_data, 2*paseto_v2_LOCAL_KEYBYTES));
+        auto key = paseto::Keys::loadFromHex(paseto::KeyType::V3_LOCAL,
+                    string_view(hex_data, 2*paseto_v3_LOCAL_KEYBYTES));
 
         // length-testing
-        for (size_t i=0; i<paseto_v2_LOCAL_KEYBYTES; i++)
+        for (size_t i=0; i<paseto_v3_LOCAL_KEYBYTES; i++)
         {
             REQUIRE_THROWS( paseto::Keys::loadFromHex(
-                paseto::KeyType::V2_LOCAL,
+                paseto::KeyType::V3_LOCAL,
                 string_view(hex_data, 2*i)) );
         }
         REQUIRE_THROWS( paseto::Keys::loadFromHex(
-                paseto::KeyType::V2_LOCAL,
+                paseto::KeyType::V3_LOCAL,
                 string_view(hex_data, sizeof(hex_data)-1)) );
     }
 
@@ -112,8 +118,8 @@ TEST_CASE("paseto_v2local_loadFrom", "[paseto_v2local]")
         char base64_data[2*sizeof(binary_data)];
         size_t len = 0;
         REQUIRE( save_base64(base64_data, sizeof(base64_data), &len,
-                       binary_data, paseto_v2_LOCAL_KEYBYTES) );
-        auto key = paseto::Keys::loadFromBase64(paseto::KeyType::V2_LOCAL,
+                       binary_data, paseto_v3_LOCAL_KEYBYTES) );
+        auto key = paseto::Keys::loadFromBase64(paseto::KeyType::V3_LOCAL,
                     string_view(base64_data, len));
 
         // try substring
@@ -122,7 +128,7 @@ TEST_CASE("paseto_v2local_loadFrom", "[paseto_v2local]")
             save_base64(base64_data, sizeof(base64_data), &len,
                         binary_data, i);
             REQUIRE_THROWS( paseto::Keys::loadFromBase64(
-                                paseto::KeyType::V2_LOCAL,
+                                paseto::KeyType::V3_LOCAL,
                                 std::string_view(base64_data, len)
                                 ));
         }
@@ -130,25 +136,25 @@ TEST_CASE("paseto_v2local_loadFrom", "[paseto_v2local]")
         save_base64(base64_data, sizeof(base64_data), &len,
                     binary_data, sizeof(binary_data));
         REQUIRE_THROWS( paseto::Keys::loadFromBase64(
-                            paseto::KeyType::V2_LOCAL,
+                            paseto::KeyType::V3_LOCAL,
                             std::string_view(base64_data, len)
                             ));
     }
 
-    // loadFromPem (not supported for v2)
+    // loadFromPem (not supported for v3 local)
     {
         string pem_secret_key = "-----BEGIN EC PRIVATE KEY-----\nMIGkAgEBBDAhUb6WGhABE1MTj0x7E/5acgyap23kh7hUAVoAavKyfhYcmI3n1Q7L\nJpHxNb792H6gBwYFK4EEACKhZANiAAT5H7mTSOyjfILDtSuavZfalI3doM8pRUlb\nTzNyYLqM9iVmajpc0JRXvKuBtGtYi7Yft+eqFr6BuzGrdb4Z1vkvRcI504m0qKiE\nzjhi6u4sNgzW23rrVkRYkb2oE3SJPko=\n-----END EC PRIVATE KEY-----";
 
         REQUIRE_THROWS( paseto::Keys::loadFromPem(
-            paseto::KeyType::V2_LOCAL,
+            paseto::KeyType::V3_LOCAL,
             pem_secret_key) );
     }
 }
 
 
-// V2_LOCAL supports all of the paserk apis
+// V3_LOCAL supports all of the paserk apis
 #if 0
-TEST_CASE("paseto_v2local_lucidity", "[paseto_v2local]")
+TEST_CASE("paseto_v3local_lucidity", "[paseto_v3local]")
 {
 }
 #endif

@@ -10,14 +10,14 @@ using std::string;
 
 #include <catch2/catch_test_macros.hpp>
 
-static string paserk_local = "k2.local.";
-static string paserk_lid = "k2.lid.";
-static string paserk_seal = "k2.seal.";
-static string paserk_wrap = "k2.local-wrap.pie.";
-static string paserk_pw = "k2.local-pw.";
+static string paserk_local = "k3.local.";
+static string paserk_lid = "k3.lid.";
+static string paserk_seal = "k3.seal.";
+static string paserk_wrap = "k3.local-wrap.pie.";
+static string paserk_pw = "k3.local-pw.";
 
 
-TEST_CASE("paserk_v2local_basic", "[paserk_v2local]")
+TEST_CASE("paserk_v3local_basic", "[paserk_v3local]")
 {
     string key_paserk;
     std::unique_ptr<paseto::Key> key;
@@ -25,7 +25,7 @@ TEST_CASE("paserk_v2local_basic", "[paserk_v2local]")
 
     // Generate the k2.local string
     {
-        key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+        key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
         key_paserk = key->toPaserk();
     }
 
@@ -33,7 +33,7 @@ TEST_CASE("paserk_v2local_basic", "[paserk_v2local]")
 
     // Load a key from the paserk local key-string
     {
-        key2 = paseto::Keys::create(paseto::KeyType::V2_LOCAL);
+        key2 = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
         REQUIRE( !key2->is_loaded() );
 
         key2->fromPaserk(key_paserk);
@@ -44,7 +44,7 @@ TEST_CASE("paserk_v2local_basic", "[paserk_v2local]")
 }
 
 
-TEST_CASE("paserk_v2local_lucidity", "[paserk_v2local]")
+TEST_CASE("paserk_v3local_lucidity", "[paserk_v3local]")
 {
     string key_paserk;
     std::unique_ptr<paseto::Key> key;
@@ -52,41 +52,41 @@ TEST_CASE("paserk_v2local_lucidity", "[paserk_v2local]")
 
     // Generate the k2.local string
     {
-        key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+        key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
         key_paserk = key->toPaserk();
     }
 
     // Load a key from the paserk local key-string
-    // should fail if not v2_local
+    // should fail if not v3_local
     {
-        key2 = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
+        key2 = paseto::Keys::create(paseto::KeyType::V2_LOCAL);
         REQUIRE_THROWS( key2->fromPaserk(key_paserk) );
 
         key2 = paseto::Keys::create(paseto::KeyType::V4_LOCAL);
         REQUIRE_THROWS( key2->fromPaserk(key_paserk) );
 
-        key2 = paseto::Keys::create(paseto::KeyType::V2_PUBLIC);
+        key2 = paseto::Keys::create(paseto::KeyType::V3_PUBLIC);
         REQUIRE_THROWS( key2->fromPaserk(key_paserk) );
 
-        key2 = paseto::Keys::create(paseto::KeyType::V2_SECRET);
+        key2 = paseto::Keys::create(paseto::KeyType::V3_SECRET);
         REQUIRE_THROWS( key2->fromPaserk(key_paserk) );
     }
 }
 
 
-TEST_CASE("paserk_v2local_invalidkeylength", "[paserk_v2local]")
+TEST_CASE("paserk_v3local_invalidkeylength", "[paserk_v3local]")
 {
     string key_paserk;
     std::unique_ptr<paseto::Key> key;
     std::unique_ptr<paseto::Key> key2;
 
-    // Generate the k2.local string
+    // Generate the k3.local string
     {
-        key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+        key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
         key_paserk = key->toPaserk();
     }
 
-    key2 = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    key2 = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
     // test all substrings of a valid key
     for (size_t i=0; i<key_paserk.length(); i++)
@@ -102,9 +102,9 @@ TEST_CASE("paserk_v2local_invalidkeylength", "[paserk_v2local]")
 }
 
 
-TEST_CASE("paserk_v2lid_basic", "[paserk_v2local]")
+TEST_CASE("paserk_v3lid_basic", "[paserk_v3local]")
 {
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
     auto kid1 = key->toPaserkId();
     auto kid2 = key->toPaserkId();
@@ -115,10 +115,10 @@ TEST_CASE("paserk_v2lid_basic", "[paserk_v2local]")
 }
 
 
-TEST_CASE("paserk_v2localwrap_basic", "[paserk_v2local]")
+TEST_CASE("paserk_v3localwrap_basic", "[paserk_v3local]")
 {
-    auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
     // basic usage test
     {
@@ -126,12 +126,12 @@ TEST_CASE("paserk_v2localwrap_basic", "[paserk_v2local]")
 
         REQUIRE( encrypted_data.compare(0, paserk_wrap.length(), paserk_wrap) == 0 );
 
-        auto restored_key = paseto::Keys::create(paseto::KeyType::V2_LOCAL);
+        auto restored_key = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
         restored_key->paserkUnwrap(encrypted_data, wrapping_key.get());
 
 
         REQUIRE( restored_key->is_loaded() );
-        REQUIRE( restored_key->keyType() == paseto::KeyType::V2_LOCAL );
+        REQUIRE( restored_key->keyType() == paseto::KeyType::V3_LOCAL );
         REQUIRE( *key == *restored_key );
     }
 
@@ -148,7 +148,7 @@ TEST_CASE("paserk_v2localwrap_basic", "[paserk_v2local]")
         auto encrypted_key = key->paserkWrap(wrapping_key.get());
         string data {"test data foo"};
 
-        auto restored_key = paseto::Keys::create(paseto::KeyType::V2_LOCAL);
+        auto restored_key = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
         restored_key->paserkUnwrap(encrypted_key, wrapping_key.get());
 
         auto encrypted_data = key->encrypt(data);
@@ -162,13 +162,13 @@ TEST_CASE("paserk_v2localwrap_basic", "[paserk_v2local]")
 }
 
 
-TEST_CASE("paserk_v2localwrap_lucidity", "[paserk_v2local]")
+TEST_CASE("paserk_v3localwrap_lucidity", "[paserk_v3local]")
 {
-    auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
     // same version, public/secret keys don't work
     REQUIRE_THROWS( key->paserkWrap(public_key.get()) );
@@ -176,58 +176,54 @@ TEST_CASE("paserk_v2localwrap_lucidity", "[paserk_v2local]")
 
     // check for other version, but local keys
     {
-        auto key3 = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
+        auto key2 = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
         auto key4 = paseto::KeyGen::generate(paseto::KeyType::V4_LOCAL);
 
-        REQUIRE( key3->is_loaded() );
+        REQUIRE( key2->is_loaded() );
         REQUIRE( key4->is_loaded() );
 
-        REQUIRE_THROWS( key->paserkWrap(key3.get()) );
+        REQUIRE_THROWS( key->paserkWrap(key2.get()) );
         REQUIRE_THROWS( key->paserkWrap(key4.get()) );
     }
 }
 
 // local-pw
-TEST_CASE("paserk_v2localpw_basic", "[paserk_v2local]")
+TEST_CASE("paserk_v3localpw_basic", "[paserk_v3local]")
 {
-    struct paseto::PasswordParams params;
-    params.params.v2.time = 1024;
-    params.params.v2.memory = 65536;
-    params.params.v2.parallelism = 1;
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    struct paseto::PasswordParams opts;
+    opts.params.v3.iterations = 25000;
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
     // wrap the key with a password
-    auto key_pw = key->paserkPasswordWrap("test-pass", &params);
+    auto key_pw = key->paserkPasswordWrap("test-pass", &opts);
 
     REQUIRE( key_pw.compare(0, paserk_pw.length(), paserk_pw) == 0 );
 
     // restore the key from the password-wrapped key
-    auto restored_key = paseto::Keys::create(paseto::KeyType::V2_LOCAL);
+    auto restored_key = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
     restored_key->paserkPasswordUnwrap(key_pw, "test-pass");
 
     REQUIRE( *key == *restored_key );
 }
 
 
-TEST_CASE("paserk_v2localpw_noparams", "[paserk_v2local]")
+TEST_CASE("paserk_v3localpw_noparams", "[paserk_v3local]")
 {
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
     // wrap the key with a password
     REQUIRE_THROWS( key->paserkPasswordWrap("test-pass", nullptr) );
 }
 
 
-TEST_CASE("paserk_v2localpw_lucidity", "[paserk_v2local]")
+TEST_CASE("paserk_v3localpw_lucidity", "[paserk_v3local]")
 {
     struct paseto::PasswordParams opts;
-    opts.params.v2.time = 1024;
-    opts.params.v2.memory = 65536;
-    opts.params.v2.parallelism = 1;
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    opts.params.v3.iterations = 25000;
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
     // wrap the key with a password
     auto key_pw = key->paserkPasswordWrap("test-pass", &opts);
@@ -241,7 +237,7 @@ TEST_CASE("paserk_v2localpw_lucidity", "[paserk_v2local]")
 
     // check for other version, but local keys
     {
-        auto key3 = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
+        auto key3 = paseto::Keys::create(paseto::KeyType::V2_LOCAL);
         auto key4 = paseto::Keys::create(paseto::KeyType::V4_LOCAL);
 
         REQUIRE_THROWS( key3->paserkPasswordUnwrap(key_pw, "test-pass") );
@@ -250,11 +246,11 @@ TEST_CASE("paserk_v2localpw_lucidity", "[paserk_v2local]")
 }
 
 // seal
-TEST_CASE("paserk_v2seal_basic", "[paserk_v2local]")
+TEST_CASE("paserk_v3seal_basic", "[paserk_v3local]")
 {
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
     // seal the key with a public-key
     auto key_seal = key->paserkSeal(public_key.get());
@@ -262,7 +258,7 @@ TEST_CASE("paserk_v2seal_basic", "[paserk_v2local]")
     REQUIRE( key_seal.compare(0, paserk_seal.length(), paserk_seal) == 0 );
 
     // unseal the key with the secret-key
-    auto restored_key = paseto::Keys::create(paseto::KeyType::V2_LOCAL);
+    auto restored_key = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
     restored_key->paserkUnseal(key_seal, secret_key.get());
 
     REQUIRE( restored_key->is_loaded() );
@@ -278,24 +274,24 @@ TEST_CASE("paserk_v2seal_basic", "[paserk_v2local]")
 }
 
 
-TEST_CASE("paserk_v2seal_noparams", "[paserk_v2local]")
+TEST_CASE("paserk_v3seal_noparams", "[paserk_v3local]")
 {
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
     REQUIRE_THROWS( key->paserkSeal(nullptr) );
     REQUIRE_THROWS( key->paserkUnseal("dummy-data", nullptr) );
 }
 
 
-TEST_CASE("paserk_v2seal_lucidity", "[paserk_v2local]")
+TEST_CASE("paserk_v3seal_lucidity", "[paserk_v3local]")
 {
-    auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
-    auto local_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto local_key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
-    auto [ public_key3, secret_key3 ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
+    auto [ public_key2, secret_key2 ] =
+        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
     auto [ public_key4, secret_key4 ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V4_PUBLIC);
 
@@ -303,8 +299,8 @@ TEST_CASE("paserk_v2seal_lucidity", "[paserk_v2local]")
     REQUIRE_THROWS( key->paserkSeal(secret_key.get()) );
     REQUIRE_THROWS( key->paserkSeal(local_key.get()) );
 
-    REQUIRE_THROWS( key->paserkSeal(public_key3.get()) );
-    REQUIRE_THROWS( key->paserkSeal(secret_key3.get()) );
+    REQUIRE_THROWS( key->paserkSeal(public_key2.get()) );
+    REQUIRE_THROWS( key->paserkSeal(secret_key2.get()) );
 
     REQUIRE_THROWS( key->paserkSeal(public_key4.get()) );
     REQUIRE_THROWS( key->paserkSeal(secret_key4.get()) );
@@ -314,14 +310,14 @@ TEST_CASE("paserk_v2seal_lucidity", "[paserk_v2local]")
 
 
     // check that that only secret-keys are used to unseal
-    auto restored_key = paseto::Keys::create(paseto::KeyType::V2_LOCAL);
+    auto restored_key = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
     REQUIRE( !restored_key->is_loaded() );
 
     REQUIRE_THROWS( restored_key->paserkUnseal(key_seal, public_key.get()) );
     REQUIRE_THROWS( restored_key->paserkUnseal(key_seal, local_key.get()) );
 
-    REQUIRE_THROWS( restored_key->paserkUnseal(key_seal, public_key3.get()) );
-    REQUIRE_THROWS( restored_key->paserkUnseal(key_seal, secret_key3.get()) );
+    REQUIRE_THROWS( restored_key->paserkUnseal(key_seal, public_key2.get()) );
+    REQUIRE_THROWS( restored_key->paserkUnseal(key_seal, secret_key2.get()) );
 
     REQUIRE_THROWS( restored_key->paserkUnseal(key_seal, public_key4.get()) );
     REQUIRE_THROWS( restored_key->paserkUnseal(key_seal, secret_key4.get()) );

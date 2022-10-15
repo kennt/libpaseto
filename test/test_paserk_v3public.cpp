@@ -10,19 +10,19 @@ using std::string;
 
 #include <catch2/catch_test_macros.hpp>
 
-static string paserk_public = "k2.public.";
-static string paserk_pid = "k2.pid.";
+static string paserk_public = "k3.public.";
+static string paserk_pid = "k3.pid.";
 
 
-TEST_CASE("paserk_v2public_basic", "[paserk_v2public]")
+TEST_CASE("paserk_v3public_basic", "[paserk_v3public]")
 {
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
     string key_paserk;
     std::unique_ptr<paseto::Key> key2;
 
-    // Generate the k2.public string
+    // Generate the k3.public string
     {
         key_paserk = public_key->toPaserk();
     }
@@ -31,7 +31,7 @@ TEST_CASE("paserk_v2public_basic", "[paserk_v2public]")
 
     // Load a key from the paserk public key-string
     {
-        key2 = paseto::Keys::create(paseto::KeyType::V2_PUBLIC);
+        key2 = paseto::Keys::create(paseto::KeyType::V3_PUBLIC);
         REQUIRE( !key2->is_loaded() );
 
         key2->fromPaserk(key_paserk);
@@ -42,51 +42,51 @@ TEST_CASE("paserk_v2public_basic", "[paserk_v2public]")
 }
 
 
-TEST_CASE("paserk_v2public_lucidity", "[paserk_v2public]")
+TEST_CASE("paserk_v3public_lucidity", "[paserk_v3public]")
 {
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
     std::unique_ptr<paseto::Key> key2;
     string key_paserk;
 
-    // Generate the k2.public string
+    // Generate the k3.public string
     {
         key_paserk = public_key->toPaserk();
     }
 
     // Load a key from the paserk local key-string
-    // should fail if not v2_local
+    // should fail if not v3_local
     {
-        key2 = paseto::Keys::create(paseto::KeyType::V3_PUBLIC);
+        key2 = paseto::Keys::create(paseto::KeyType::V2_PUBLIC);
         REQUIRE_THROWS( key2->fromPaserk(key_paserk) );
 
         key2 = paseto::Keys::create(paseto::KeyType::V4_PUBLIC);
         REQUIRE_THROWS( key2->fromPaserk(key_paserk) );
 
-        key2 = paseto::Keys::create(paseto::KeyType::V2_LOCAL);
+        key2 = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
         REQUIRE_THROWS( key2->fromPaserk(key_paserk) );
 
-        key2 = paseto::Keys::create(paseto::KeyType::V2_SECRET);
+        key2 = paseto::Keys::create(paseto::KeyType::V3_SECRET);
         REQUIRE_THROWS( key2->fromPaserk(key_paserk) );
     }
 }
 
 
-TEST_CASE("paserk_v2public_invalidkeylength", "[paserk_v2public]")
+TEST_CASE("paserk_v3public_invalidkeylength", "[paserk_v3public]")
 {
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
     string key_paserk;
     std::unique_ptr<paseto::Key> key2;
 
-    // Generate the k2.public string
+    // Generate the k3.public string
     {
         key_paserk = public_key->toPaserk();
     }
 
-    key2 = paseto::Keys::create(paseto::KeyType::V2_PUBLIC);
+    key2 = paseto::Keys::create(paseto::KeyType::V3_PUBLIC);
 
     // test all substrings of a valid key
     for (size_t i=0; i<key_paserk.length(); i++)
@@ -102,10 +102,10 @@ TEST_CASE("paserk_v2public_invalidkeylength", "[paserk_v2public]")
 }
 
 
-TEST_CASE("paserk_v2pid_basic", "[paserk_v2public]")
+TEST_CASE("paserk_v3pid_basic", "[paserk_v3public]")
 {
     auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
     auto kid1 = public_key->toPaserkId();
     auto kid2 = public_key->toPaserkId();
