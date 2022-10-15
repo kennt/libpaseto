@@ -118,7 +118,7 @@ TEST_CASE("paserk_v3sid_basic", "[paserk_v3secret]")
 }
 
 
-TEST_CASE("paserk_v3secretwrap_basic", "[paserk_v3local]")
+TEST_CASE("paserk_v3secretwrap_basic", "[paserk_v3secret]")
 {
     auto [ public_key, secret_key ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
@@ -162,7 +162,7 @@ TEST_CASE("paserk_v3secretwrap_basic", "[paserk_v3local]")
 }
 
 
-TEST_CASE("paserk_v3secretwrap_lucidity", "[paserk_v3local]")
+TEST_CASE("paserk_v3secretwrap_lucidity", "[paserk_v3secret]")
 {
     auto [ public_key, secret_key ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
@@ -187,7 +187,7 @@ TEST_CASE("paserk_v3secretwrap_lucidity", "[paserk_v3local]")
 
 
 // local-pw
-TEST_CASE("paserk_v3secretpw_basic", "[paserk_v3local]")
+TEST_CASE("paserk_v3secretpw_basic", "[paserk_v3secret]")
 {
     struct paseto::PasswordParams opts;
     opts.params.v3.iterations = 10000;
@@ -207,7 +207,7 @@ TEST_CASE("paserk_v3secretpw_basic", "[paserk_v3local]")
 }
 
 
-TEST_CASE("paserk_v3secretpw_noparams", "[paserk_v3local]")
+TEST_CASE("paserk_v3secretpw_noparams", "[paserk_v3secret]")
 {
     auto [ public_key, secret_key ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
@@ -217,7 +217,7 @@ TEST_CASE("paserk_v3secretpw_noparams", "[paserk_v3local]")
 }
 
 
-TEST_CASE("paserk_v3secretpw_lucidity", "[paserk_v3local]")
+TEST_CASE("paserk_v3secretpw_lucidity", "[paserk_v3secret]")
 {
     struct paseto::PasswordParams opts;
     opts.params.v3.iterations = 10000;
