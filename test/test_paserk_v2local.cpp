@@ -118,7 +118,7 @@ TEST_CASE("paserk_v2lid_basic", "[paserk_v2local]")
 }
 
 
-TEST_CASE("paserk_v2wrap_basic", "[paserk_v2local]")
+TEST_CASE("paserk_v2localwrap_basic", "[paserk_v2local]")
 {
     auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
     auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
@@ -165,7 +165,7 @@ TEST_CASE("paserk_v2wrap_basic", "[paserk_v2local]")
 }
 
 
-TEST_CASE("paserk_v2wrap_lucidity", "[paserk_v2local]")
+TEST_CASE("paserk_v2localwrap_lucidity", "[paserk_v2local]")
 {
     auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
     auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
@@ -191,7 +191,7 @@ TEST_CASE("paserk_v2wrap_lucidity", "[paserk_v2local]")
 }
 
 // local-pw
-TEST_CASE("paserk_v2pw_basic", "[paserk_v2local]")
+TEST_CASE("paserk_v2localpw_basic", "[paserk_v2local]")
 {
     struct paseto::PasswordParams params;
     params.params.v2.time = 1024;
@@ -212,7 +212,7 @@ TEST_CASE("paserk_v2pw_basic", "[paserk_v2local]")
 }
 
 
-TEST_CASE("paserk_v2pw_noparams", "[paserk_v2local]")
+TEST_CASE("paserk_v2localpw_noparams", "[paserk_v2local]")
 {
     auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
 
@@ -221,7 +221,7 @@ TEST_CASE("paserk_v2pw_noparams", "[paserk_v2local]")
 }
 
 
-TEST_CASE("paserk_v2pw_lucidity", "[paserk_v2local]")
+TEST_CASE("paserk_v2localpw_lucidity", "[paserk_v2local]")
 {
     struct paseto::PasswordParams opts;
     opts.params.v2.time = 1024;

@@ -634,6 +634,23 @@ public:
                 KeyTypeToString(_key_type), __LINE__));
     }
 
+    void _checkExpectedKeyType(const char *operation_desc,
+        int expected_version, const char *expected_purpose,
+        KeyType kt)
+    {
+        // Only public keys of the same version are allowed
+        if (expected_version != KeyTypeVersion(kt))
+            throw UnexpectedException(
+                fmt::format("unexpected: {} : key version mismatch: actual:{} expected:{}",
+                    operation_desc,
+                    KeyTypeVersion(kt), expected_version));
+        if (strcmp(KeyTypePurpose(kt), expected_purpose) != 0)
+            throw UnexpectedException(
+                fmt::format("unexpected: {} : must be a {} key: actual:{}",
+                    operation_desc, expected_purpose,
+                    KeyTypePurpose(kt)));
+    }
+
 
 #ifdef DEBUG
     void setNonce(const std::string &nonce_hex, const binary_view &payload)
@@ -838,16 +855,8 @@ public:
         if (public_key == NULL)
             throw UnexpectedException("unexpected: a public_key must be provided");
 
-        // Only public keys of the same version are allowed
-        // Although technically v2 and v4 are interchangeable
-        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(public_key->keyType()))
-            throw UnexpectedException(
-                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
-                    KeyTypeVersion(public_key->keyType()), KeyTypeVersion(this->keyType())));
-        if (strcmp(KeyTypePurpose(public_key->keyType()), "public") != 0)
-            throw UnexpectedException(
-                fmt::format("unexpected: must be a public key: actual:{}",
-                    KeyTypePurpose(public_key->keyType())));
+        _checkExpectedKeyType("paserk-seal",
+            KeyTypeVersion(this->keyType()), "public", public_key->keyType());
 
         public_key->checkKey();
         return paserkSeal(binary_view(public_key->data(), public_key->size()));
@@ -867,16 +876,8 @@ public:
         if (secret_key == NULL)
             throw UnexpectedException("unexpected: a secret_key must be provided");
 
-        // Only secret keys of the same version are allowed
-        // Although technically v2 and v4 are interchangeable
-        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(secret_key->keyType()))
-            throw UnexpectedException(
-                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
-                    KeyTypeVersion(secret_key->keyType()), KeyTypeVersion(this->keyType())));
-        if (strcmp(KeyTypePurpose(secret_key->keyType()), "secret") != 0)
-            throw UnexpectedException(
-                fmt::format("unexpected: must be a secret key: actual:{}",
-                    KeyTypePurpose(secret_key->keyType())));
+        _checkExpectedKeyType("paserk-unseal",
+            KeyTypeVersion(this->keyType()), "secret", secret_key->keyType());
 
         secret_key->checkKey();
 
@@ -894,16 +895,8 @@ public:
         if (local_key == NULL)
             throw UnexpectedException("unexpected: a local_key must be provided");
 
-        // Only local keys of the same version are allowed
-        // Although technically v2 and v4 are interchangeable
-        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(local_key->keyType()))
-            throw UnexpectedException(
-                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
-                    KeyTypeVersion(local_key->keyType()), KeyTypeVersion(this->keyType())));
-        if (strcmp(KeyTypePurpose(local_key->keyType()), "local") != 0)
-            throw UnexpectedException(
-                fmt::format("unexpected: must be a local key: actual:{}",
-                    KeyTypePurpose(local_key->keyType())));
+        _checkExpectedKeyType("paserk-wrap",
+            KeyTypeVersion(this->keyType()), "local", local_key->keyType());
 
         local_key->checkKey();
 
@@ -924,16 +917,8 @@ public:
         if (local_key == NULL)
             throw UnexpectedException("unexpected: a local_key must be provided");
 
-        // Only local keys of the same version are allowed
-        // Although technically v2 and v4 are interchangeable
-        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(local_key->keyType()))
-            throw UnexpectedException(
-                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
-                    KeyTypeVersion(local_key->keyType()), KeyTypeVersion(this->keyType())));
-        if (strcmp(KeyTypePurpose(local_key->keyType()), "local") != 0)
-            throw UnexpectedException(
-                fmt::format("unexpected: must be a local key: actual:{}",
-                    KeyTypePurpose(local_key->keyType())));
+        _checkExpectedKeyType("paserk-unwrap",
+            KeyTypeVersion(this->keyType()), "local", local_key->keyType());
 
         local_key->checkKey();
 
@@ -1135,16 +1120,8 @@ public:
         if (local_key == NULL)
             throw UnexpectedException("unexpected: a local_key must be provided");
 
-        // Only local keys of the same version are allowed
-        // Although technically v2 and v4 are interchangeable
-        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(local_key->keyType()))
-            throw UnexpectedException(
-                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
-                    KeyTypeVersion(local_key->keyType()), KeyTypeVersion(this->keyType())));
-        if (strcmp(KeyTypePurpose(local_key->keyType()), "local") != 0)
-            throw UnexpectedException(
-                fmt::format("unexpected: must be a local key: actual:{}",
-                    KeyTypePurpose(local_key->keyType())));
+        _checkExpectedKeyType("paserk-wrap",
+            KeyTypeVersion(this->keyType()), "local", local_key->keyType());
 
         local_key->checkKey();
 
@@ -1165,16 +1142,8 @@ public:
         if (local_key == NULL)
             throw UnexpectedException("unexpected: a local_key must be provided");
 
-        // Only local keys of the same version are allowed
-        // Although technically v2 and v4 are interchangeable
-        if (KeyTypeVersion(this->keyType()) != KeyTypeVersion(local_key->keyType()))
-            throw UnexpectedException(
-                fmt::format("unexpected: key version mismatch: actual:{} expected:{}",
-                    KeyTypeVersion(local_key->keyType()), KeyTypeVersion(this->keyType())));
-        if (strcmp(KeyTypePurpose(local_key->keyType()), "local") != 0)
-            throw UnexpectedException(
-                fmt::format("unexpected: must be a local key: actual:{}",
-                    KeyTypePurpose(local_key->keyType())));
+        _checkExpectedKeyType("paserk-unwrap",
+            KeyTypeVersion(this->keyType()), "local", local_key->keyType());
 
         local_key->checkKey();
 

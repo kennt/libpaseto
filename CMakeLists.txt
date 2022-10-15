@@ -147,9 +147,11 @@ add_executable(pasetocpptests
 	test/helpers.c
 	test/test.cpp
 	test/test_paseto_v2local.cpp
-	test/test_paseto_v2public.cpp
 	test/test_paserk_v2local.cpp
+	test/test_paseto_v2public.cpp
 	test/test_paserk_v2public.cpp
+	test/test_paseto_v2secret.cpp
+	test/test_paserk_v2secret.cpp
 	)
 target_link_libraries(pasetocpptests
 	PRIVATE
