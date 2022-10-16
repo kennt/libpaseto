@@ -549,7 +549,7 @@ public:
                 KeyTypeToString(_key_type), __LINE__));
     }
 
-    virtual std::string toPaserkId()
+    virtual std::string paserkId()
     {
         throw UnexpectedException("Unexpected: Not yet implemented");
     }
@@ -838,7 +838,7 @@ public:
         this->_is_loaded = true;
     }
 
-    std::string toPaserkId() override
+    std::string paserkId() override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.lid.", KeyTypeVersion(this->keyType())), NULL, 0, NULL);
@@ -1033,7 +1033,7 @@ public:
         _is_loaded = true;
     }
 
-    std::string toPaserkId() override
+    std::string paserkId() override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.pid.", KeyTypeVersion(this->keyType())), NULL, 0, NULL);
@@ -1103,7 +1103,7 @@ public:
         this->_is_loaded = true;
     }
 
-    std::string toPaserkId() override
+    std::string paserkId() override
     {
         return buildPaserk<T, topaserk>(this,
             fmt::format("k{}.sid.", KeyTypeVersion(this->keyType())), NULL, 0, NULL);

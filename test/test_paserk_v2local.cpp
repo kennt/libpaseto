@@ -106,8 +106,8 @@ TEST_CASE("paserk_v2lid_basic", "[paserk_v2local]")
 {
     auto key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
 
-    auto kid1 = key->toPaserkId();
-    auto kid2 = key->toPaserkId();
+    auto kid1 = key->paserkId();
+    auto kid2 = key->paserkId();
 
     REQUIRE( kid1.compare(0, paserk_lid.length(), paserk_lid) == 0 );
 

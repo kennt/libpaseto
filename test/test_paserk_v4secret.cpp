@@ -24,14 +24,14 @@ TEST_CASE("paserk_v4secret_basic", "[paserk_v4secret]")
     string key_paserk;
     std::unique_ptr<paseto::Key> key2;
 
-    // Generate the k4.public string
+    // Generate the k4.secret string
     {
         key_paserk = secret_key->toPaserk();
     }
 
     REQUIRE( key_paserk.compare(0, paserk_secret.length(), paserk_secret) == 0 );
 
-    // Load a key from the paserk public key-string
+    // Load a key from the paserk secret key-string
     {
         key2 = paseto::Keys::create(paseto::KeyType::V4_SECRET);
         REQUIRE( !key2->is_loaded() );
@@ -52,13 +52,13 @@ TEST_CASE("paserk_v4secret_lucidity", "[paserk_v4secret]")
     std::unique_ptr<paseto::Key> key2;
     string key_paserk;
 
-    // Generate the k4.public string
+    // Generate the k4.secret string
     {
         key_paserk = secret_key->toPaserk();
     }
 
-    // Load a key from the paserk local key-string
-    // should fail if not v4_local
+    // Load a key from the paserk secret key-string
+    // should fail if not v4_secret
     {
         key2 = paseto::Keys::create(paseto::KeyType::V2_SECRET);
         REQUIRE_THROWS( key2->fromPaserk(key_paserk) );
@@ -83,7 +83,7 @@ TEST_CASE("paserk_v4secret_invalidkeylength", "[paserk_v4secret]")
     string key_paserk;
     std::unique_ptr<paseto::Key> key2;
 
-    // Generate the k4.public string
+    // Generate the k4.secret string
     {
         key_paserk = secret_key->toPaserk();
     }
@@ -109,8 +109,8 @@ TEST_CASE("paserk_v4sid_basic", "[paserk_v4secret]")
     auto [ public_key, secret_key ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V4_PUBLIC);
 
-    auto kid1 = secret_key->toPaserkId();
-    auto kid2 = secret_key->toPaserkId();
+    auto kid1 = secret_key->paserkId();
+    auto kid2 = secret_key->paserkId();
 
     REQUIRE( kid1.compare(0, paserk_sid.length(), paserk_sid) == 0 );
 

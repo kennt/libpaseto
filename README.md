@@ -51,9 +51,11 @@ This is a work-in-progress.
 #include "paseto.hpp"
 
 #include <iostream>
-#include <string>
+using std::cout;
+using std::endl;
 
-using namespace std;
+#include <string>
+using std::string;
 
 int main() {
     string message("test");
@@ -64,12 +66,7 @@ int main() {
     auto localkey = paseto::Keys::createFromBase64(
                         paseto::KeyType::V3_LOCAL, keydata);
 
-    // Two different ways of doing the same thing
-    // A BinaryView removes the need to copy the data
-    paseto::BinaryView message_view {message};
-    auto footer_view = paseto::BinaryView::fromString(footer);
-
-    encrypted = localkey->encrypt(message_view, footer_view);
+    encrypted = localkey->encrypt(message, footer);
     cout << "encrypted: " << encrypted << endl;
 
     auto token = localkey->decrypt(encrypted);

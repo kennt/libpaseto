@@ -109,8 +109,8 @@ TEST_CASE("paserk_v2sid_basic", "[paserk_v2secret]")
     auto [ public_key, secret_key ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
 
-    auto kid1 = secret_key->toPaserkId();
-    auto kid2 = secret_key->toPaserkId();
+    auto kid1 = secret_key->paserkId();
+    auto kid2 = secret_key->paserkId();
 
     REQUIRE( kid1.compare(0, paserk_sid.length(), paserk_sid) == 0 );
 

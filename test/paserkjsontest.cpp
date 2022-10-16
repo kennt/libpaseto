@@ -50,6 +50,16 @@ int main(int argc, char **argv)
         cout << "  " << name << endl;
     }
 
+    {
+        char base64_data[2*paseto_v3_LOCAL_KEYBYTES];
+        uint8_t binary_data[paseto_v3_LOCAL_KEYBYTES];
+        randombytes_buf(binary_data, sizeof(binary_data));
+        size_t len = 0;
+        save_base64(base64_data, sizeof(base64_data), &len,
+                       binary_data, paseto_v3_LOCAL_KEYBYTES);
+        cout << base64_data << endl;
+    }
+
     return 0;
 }
 
@@ -235,8 +245,8 @@ void run_no_params_test_vector(json &j,
 
 void run_lid_test_vector(json &j, std::string version)
 {
-    // create function object to call toPaserkId()
-    FNTO_PASERK_NO_PARAMS fEncode = &paseto::Key::toPaserkId;
+    // create function object to call paserkId()
+    FNTO_PASERK_NO_PARAMS fEncode = &paseto::Key::paserkId;
     run_no_params_test_vector(j, version, "local", fEncode, nullptr);
 }
 
@@ -474,8 +484,8 @@ void run_local_test_vector(json &j, std::string version)
 
 void run_pid_test_vector(json &j, std::string version)
 {
-    // create function object to call toPaserkId()
-    FNTO_PASERK_NO_PARAMS fEncode = &paseto::Key::toPaserkId;
+    // create function object to call paserkId()
+    FNTO_PASERK_NO_PARAMS fEncode = &paseto::Key::paserkId;
     run_no_params_test_vector(j, version, "public", fEncode, nullptr);
 }
 
@@ -623,6 +633,7 @@ void run_v3_seal_test_vector(json &j, std::string version, const std::string &sK
             // (but will also test sealing/unsealing ourselves)
 
             cout << name << " " << "expect-fail:" << expect_fail;
+#if 0
 
             if (!expect_fail)
             {
@@ -658,7 +669,7 @@ void run_v3_seal_test_vector(json &j, std::string version, const std::string &sK
                     cout << "  self-test:FAILED";
                 }
             }
-
+#endif
             std::string actual;
 
             {
@@ -733,8 +744,8 @@ void run_secret_test_vector(json &j, std::string version)
 
 void run_sid_test_vector(json &j, std::string version)
 {
-    // create function object to call toPaserkId()
-    FNTO_PASERK_NO_PARAMS fEncode = &paseto::Key::toPaserkId;
+    // create function object to call paserkId()
+    FNTO_PASERK_NO_PARAMS fEncode = &paseto::Key::paserkId;
     run_no_params_test_vector(j, version, "secret", fEncode, nullptr);
 }
 

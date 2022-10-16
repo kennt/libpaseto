@@ -55,8 +55,8 @@ TEST_CASE("paserk_v4public_lucidity", "[paserk_v4public]")
         key_paserk = public_key->toPaserk();
     }
 
-    // Load a key from the paserk local key-string
-    // should fail if not v4_local
+    // Load a key from the paserk public key-string
+    // should fail if not v4_public
     {
         key2 = paseto::Keys::create(paseto::KeyType::V2_PUBLIC);
         REQUIRE_THROWS( key2->fromPaserk(key_paserk) );
@@ -107,8 +107,8 @@ TEST_CASE("paserk_v4pid_basic", "[paserk_v4public]")
     auto [ public_key, secret_key ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V4_PUBLIC);
 
-    auto kid1 = public_key->toPaserkId();
-    auto kid2 = public_key->toPaserkId();
+    auto kid1 = public_key->paserkId();
+    auto kid2 = public_key->paserkId();
 
     REQUIRE( kid1.compare(0, paserk_pid.length(), paserk_pid) == 0 );
 
