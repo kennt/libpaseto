@@ -1,4 +1,3 @@
-_Pragma("GCC diagnostic ignored \"-Wunused-variable\"")
 
 #include "paseto.hpp"
 
