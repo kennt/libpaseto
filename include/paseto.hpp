@@ -638,7 +638,7 @@ public:
         int expected_version, const char *expected_purpose,
         KeyType kt)
     {
-        // Only public keys of the same version are allowed
+        // Only keys of the same version are allowed
         if (expected_version != KeyTypeVersion(kt))
             throw UnexpectedException(
                 fmt::format("unexpected: {} : key version mismatch: actual:{} expected:{}",
@@ -793,7 +793,7 @@ void loadPaserk(paseto::Key *key,
 
     key->clear();
 
-    // These checks are redudant (they are also performed in the C api)
+    // These checks are redundant (they are also performed in the C api)
     // But we also do them here because we can provide more info in the
     // exception.
     if (key->size() != key->required_length())

@@ -249,14 +249,14 @@ int main() {
         opts.params.v3.iterations = 25000;
 
         // wrap the key with a password
-        auto pw_dsta = local_key->paserkPasswordWrap("test-pass", &opts);
+        auto pw_data = local_key->paserkPasswordWrap("test-pass", &opts);
 
         // password-wrapped: k3.local-pw.QsYDWkV-viv6ASvOEM8VHsjz9BGckOlSVWW__KkbbOUAAGGo2RrxpzEoV6J5Ng49ow9uq_3id6aA5eCs1c0-VC-FwoT6MYundSQKVq6GUiFwonamCLQiLVbw6OxCqy5p-N5TshN59p6dfaJRPZxNyyamsu2kag5DqDMP9VDpDsLRYewD
-        cout << "password-wrapped: " << pw_dsta << endl;
+        cout << "password-wrapped: " << pw_data << endl;
 
         // restore the key from the password-wrapped key
         auto restored_key = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
-        restored_key->paserkPasswordUnwrap(pw_dsta, "test-pass");
+        restored_key->paserkPasswordUnwrap(pw_data, "test-pass");
 
         assert( *local_key == *restored_key );
     }

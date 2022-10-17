@@ -3,13 +3,15 @@ This is a work-in-progress.
 
 ### Additions:
 - v3/v4 implementations (with a C interface)
-- A C++ header-only interface for versions 2/3/4
+- A C++ header-only interface for versions 2/3/4 (still requires the libpaseto C library)
 - an additional test executable that runs through the json test vectors
 - a Dockerfile to use for building
 - a Makefile to help with the Docker builds
+- full PASERK implementation and algorithmic lucidity
+- full paseto/paserk test vectors
 
 ### Restrictions:
-- The C++ code relies on C++ 17.
+- The C++ code requires C++ 17.
 
 ### Additional source dependencies (although these are downloaded/built via CMake).
 - Crypto++ (or CryptoPP) libraries (used for non-libsodium crypto).
@@ -18,11 +20,10 @@ This is a work-in-progress.
 - Catch2
 
 ### TODO:
-- some code reorg
-- testing
 - docs
-- paserk
-
+- claims support (rather than only binary data)
+- add getPublicKey() function to secret keys
+- support for PEM files for v2/v4
 
 ### Sample make/Docker-based workflow
 ```
