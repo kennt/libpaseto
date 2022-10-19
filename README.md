@@ -48,7 +48,9 @@ This is a work-in-progress.
 
 
 ### Example C++ code
-```
+
+```C++
+
 
 #include "paseto.hpp"
 
@@ -238,6 +240,7 @@ int main() {
         restored_key->fromPaserk(paserk_secret);
     }
 
+
     // --------------------------------------------------------
     // Paserk seal
     // Symmetric key wrapped by Asymmetric encryption
@@ -250,15 +253,15 @@ int main() {
             paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
         // seal the key with the public-key
-        string sealed_data = local_key->paserkSeal(public_key.get());
+        string sealed_data = public_key->seal(local_key.get());
 
         // sealed: k3.seal.YEH1wZPVAVvKTEgGg9soR-0a7elSPed44MpOFEa5ncGiwCOwcLx4swWj_cZQnorBA1wr6QIIzl25sbTIyPQcLeAVQRSMzEHV4mHEGHy-GxrUfyPrRJKnjhmrt2TWn3IaBycD47CPuxbZu3K19DPYHMKBrlYH05DuAo1Qb2sJILQO
         cout << "sealed: " << sealed_data << endl;
 
         // unseal the key with the secret-key
-        auto restored_key = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
-        restored_key->paserkUnseal(sealed_data, secret_key.get());
+        auto restored_key = secret_key->unseal(sealed_data);
 
+        assert( restored_key->keyType() == paseto::KeyType::V3_LOCAL );
         assert( restored_key->is_loaded() );
         assert( *local_key == *restored_key );
     }
@@ -275,14 +278,13 @@ int main() {
             paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
 
         // Wrap a secret-key (could also be a local-key)
-        string wrapped_data = secret_key->paserkWrap(local_key.get());
+        string wrapped_data = local_key->wrap(secret_key.get());
 
         // wrapped: k3.secret-wrap.pie.vNKrbBYNpnSnXKVfgy3JYV0pMjGt8ubqJAYBwPs9jH9__X5LcXADo4q-66sDaKXbRagqns8TD-FuBN3U-P-3E6CFI1ADbzfW51mfKDnayqJnP5ep_JVT6DrBqgoACUW3UFV9NX9RcVlIRALAqpqOJ8pOQT8IEkiZCJ75Oyo3DDA
         cout << "wrapped: " << wrapped_data << endl;
 
         // Unwrap the key using the local key
-        auto restored_key = paseto::Keys::create(paseto::KeyType::V3_SECRET);
-        restored_key->paserkUnwrap(wrapped_data, local_key.get());
+        auto restored_key = local_key->unwrap(wrapped_data);
 
         assert( *secret_key == *restored_key );
     }
@@ -300,14 +302,13 @@ int main() {
         opts.params.v3.iterations = 25000;
 
         // wrap the key with a password
-        auto pw_dsta = local_key->paserkPasswordWrap("test-pass", &opts);
+        auto pw_data = paserk::passwordWrap(local_key.get(), "test-pass", &opts);
 
         // password-wrapped: k3.local-pw.QsYDWkV-viv6ASvOEM8VHsjz9BGckOlSVWW__KkbbOUAAGGo2RrxpzEoV6J5Ng49ow9uq_3id6aA5eCs1c0-VC-FwoT6MYundSQKVq6GUiFwonamCLQiLVbw6OxCqy5p-N5TshN59p6dfaJRPZxNyyamsu2kag5DqDMP9VDpDsLRYewD
-        cout << "password-wrapped: " << pw_dsta << endl;
+        cout << "password-wrapped: " << pw_data << endl;
 
         // restore the key from the password-wrapped key
-        auto restored_key = paseto::Keys::create(paseto::KeyType::V3_LOCAL);
-        restored_key->paserkPasswordUnwrap(pw_dsta, "test-pass");
+        auto restored_key = paserk::passwordUnwrap(pw_data, "test-pass");
 
         assert( *local_key == *restored_key );
     }
