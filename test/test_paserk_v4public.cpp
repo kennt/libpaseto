@@ -12,6 +12,7 @@ using std::string;
 
 static string paserk_public = "k4.public.";
 static string paserk_pid = "k4.pid.";
+static string paserk_seal = "k4.seal.";
 
 
 TEST_CASE("paserk_v4public_basic", "[paserk_v4public]")
@@ -113,4 +114,93 @@ TEST_CASE("paserk_v4pid_basic", "[paserk_v4public]")
     REQUIRE( kid1.compare(0, paserk_pid.length(), paserk_pid) == 0 );
 
     REQUIRE( kid1 == kid2 );
+}
+
+
+// seal
+TEST_CASE("paserk_v4seal_basic", "[paserk_v4public]")
+{
+    auto key = paseto::KeyGen::generate(paseto::KeyType::V4_LOCAL);
+    auto [ public_key, secret_key ] =
+        paseto::KeyGen::generatePair(paseto::KeyType::V4_PUBLIC);
+
+    // seal the key with a public-key
+    auto key_seal = public_key->seal(key.get());
+
+    REQUIRE( key_seal.compare(0, paserk_seal.length(), paserk_seal) == 0 );
+
+    // unseal the key with the secret-key
+    auto restored_key = secret_key->unseal(key_seal);
+
+
+    REQUIRE( restored_key->is_loaded() );
+    REQUIRE( restored_key->keyType() == paseto::KeyType::V4_LOCAL );
+    REQUIRE( *key == *restored_key );
+
+    // Test that the keys function the same
+    {
+        string test_data {"my-test-data"};
+        auto encrypted_data = key->encrypt(test_data);
+        auto token = restored_key->decrypt(encrypted_data);
+        REQUIRE(token.payload().toString() == test_data);
+    }
+}
+
+
+TEST_CASE("paserk_v4seal_noparams", "[paserk_v4public]")
+{
+    auto [ public_key, secret_key ] =
+        paseto::KeyGen::generatePair(paseto::KeyType::V4_PUBLIC);
+
+    REQUIRE_THROWS( public_key->seal(nullptr) );
+    REQUIRE_THROWS( secret_key->unseal("") );
+}
+
+
+TEST_CASE("paserk_v4seal_lucidity", "[paserk_v4public]")
+{
+
+    auto local_key = paseto::KeyGen::generate(paseto::KeyType::V4_LOCAL);
+    auto [ public_key, secret_key ] =
+        paseto::KeyGen::generatePair(paseto::KeyType::V4_PUBLIC);
+
+    auto local_key2 = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    auto [ public_key2, secret_key2 ] =
+        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+    auto local_key3 = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
+    auto [ public_key3, secret_key3 ] =
+        paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
+
+    // only public-keys can be used to seal
+    REQUIRE_THROWS( secret_key->seal(local_key.get()) );
+    REQUIRE_THROWS( local_key->seal(local_key.get()) );
+
+    REQUIRE_THROWS( public_key2->seal(local_key.get()) );
+    REQUIRE_THROWS( secret_key2->seal(local_key.get()) );
+
+    REQUIRE_THROWS( public_key3->seal(local_key.get()) );
+    REQUIRE_THROWS( secret_key3->seal(local_key.get()) );
+
+    // we can only seal local keys
+    REQUIRE_THROWS( public_key->seal(public_key.get()) );
+    REQUIRE_THROWS( public_key->seal(secret_key.get()) );
+
+    // version checks
+    REQUIRE_THROWS( public_key->seal(local_key2.get()) );
+    REQUIRE_THROWS( public_key->seal(local_key3.get()) );
+
+
+    // seal the key with a public-key
+    auto key_seal = public_key->seal(local_key.get());
+
+
+    // check that that only secret-keys are used to unseal
+    REQUIRE_THROWS( public_key->unseal(key_seal) );
+    REQUIRE_THROWS( local_key->unseal(key_seal) );
+
+    REQUIRE_THROWS( public_key2->unseal(key_seal) );
+    REQUIRE_THROWS( secret_key2->unseal(key_seal) );
+
+    REQUIRE_THROWS( public_key3->unseal(key_seal) );
+    REQUIRE_THROWS( secret_key3->unseal(key_seal) );
 }

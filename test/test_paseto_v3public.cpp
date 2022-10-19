@@ -164,25 +164,28 @@ TEST_CASE("paseto_v3public_lucidity", "[paseto_v3public]")
     auto local_key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
 
     {
-        auto sealed_data = local_key->paserkSeal(public_key.get());
-        REQUIRE_THROWS( public_key->paserkSeal(public_key.get()) );
-        REQUIRE_THROWS( public_key->paserkUnseal(sealed_data, secret_key.get()) );
+        auto sealed_data = public_key->seal(local_key.get());
+        REQUIRE_THROWS( public_key->seal(public_key.get()) );
+        REQUIRE_THROWS( public_key->seal(secret_key.get()) );
+        REQUIRE_THROWS( secret_key->seal(local_key.get()) );
+        REQUIRE_THROWS( secret_key->seal(secret_key.get()) );
+        REQUIRE_THROWS( secret_key->seal(public_key.get()) );
+        REQUIRE_THROWS( local_key->unseal(sealed_data) );
+        REQUIRE_THROWS( public_key->unseal(sealed_data) );
     }
 
     {
         auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
-        auto wrapped_data = local_key->paserkWrap(wrapping_key.get());
-        REQUIRE_THROWS( public_key->paserkWrap(wrapping_key.get()) );
-        REQUIRE_THROWS( public_key->paserkUnwrap(wrapped_data, wrapping_key.get()) );
+        auto wrapped_data = wrapping_key->wrap(local_key.get());
+        REQUIRE_THROWS( public_key->wrap(public_key.get()) );
+        REQUIRE_THROWS( public_key->unwrap(wrapped_data) );
     }
 
     {
         string password {"password"};
         struct paseto::PasswordParams opts;
             opts.params.v3.iterations = 10000;
-        auto password_wrapped_data = local_key->paserkPasswordWrap(password, &opts);
-        REQUIRE_THROWS( public_key->paserkPasswordWrap(password, &opts) );
-        REQUIRE_THROWS( public_key->paserkPasswordUnwrap(password_wrapped_data, password) );
+        REQUIRE_THROWS( paserk::passwordWrap(public_key.get(), password, &opts) );
     }
 }
 

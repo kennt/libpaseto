@@ -154,8 +154,8 @@ TEST_CASE("paseto_v2secret_lucidity", "[paseto_v2secret]")
     auto local_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
 
     {
-        auto sealed_data = local_key->paserkSeal(public_key.get());    
-        REQUIRE_THROWS( secret_key->paserkSeal(public_key.get()) );
-        REQUIRE_THROWS( secret_key->paserkUnseal(sealed_data, secret_key.get()) );
+        auto sealed_data = public_key->seal(local_key.get());
+        REQUIRE_THROWS( public_key->seal(secret_key.get()) );
+        REQUIRE_THROWS( local_key->unseal(sealed_data) );
     }
 }

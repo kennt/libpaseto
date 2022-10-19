@@ -13,7 +13,6 @@ using std::string;
 static string paserk_secret = "k2.secret.";
 static string paserk_sid = "k2.sid.";
 static string paserk_pw = "k2.secret-pw.";
-static string paserk_wrap = "k2.secret-wrap.pie.";
 
 
 TEST_CASE("paserk_v2secret_basic", "[paserk_v2secret]")
@@ -118,104 +117,58 @@ TEST_CASE("paserk_v2sid_basic", "[paserk_v2secret]")
 }
 
 
-TEST_CASE("paserk_v2secretwrap_basic", "[paserk_v2secret]")
-{
-    auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
-    auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
-
-    // basic usage test
-    {
-        auto encrypted_data = secret_key->paserkWrap(wrapping_key.get());
-
-        REQUIRE( encrypted_data.compare(0, paserk_wrap.length(), paserk_wrap) == 0 );
-
-        auto restored_key = paseto::Keys::create(paseto::KeyType::V2_SECRET);
-        restored_key->paserkUnwrap(encrypted_data, wrapping_key.get());
-
-        REQUIRE( restored_key->is_loaded() );
-        REQUIRE( restored_key->keyType() == paseto::KeyType::V2_SECRET );
-        REQUIRE( *secret_key == *restored_key );
-    }
-
-    // test that the wrapped keys are different (due to random nonce)
-    {
-        auto encrypted_key1 = secret_key->paserkWrap(wrapping_key.get());
-        auto encrypted_key2 = secret_key->paserkWrap(wrapping_key.get());
-
-        REQUIRE( encrypted_key1 != encrypted_key2 );
-    }
-
-    // test that sign/verify works
-    {
-        auto encrypted_key = secret_key->paserkWrap(wrapping_key.get());
-        string data {"test data foo"};
-
-        auto restored_key = paseto::Keys::create(paseto::KeyType::V2_SECRET);
-        restored_key->paserkUnwrap(encrypted_key, wrapping_key.get());
-
-        auto signed_data = restored_key->sign(data);
-
-        auto verified_data1 = public_key->verify(signed_data);
-        REQUIRE( verified_data1.payload().toString() == data );
-    }
-}
-
-
-TEST_CASE("paserk_v2secretwrap_lucidity", "[paserk_v2secret]")
-{
-    auto [ public_key, secret_key ] =
-        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
-    auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
-
-    // same version, public/secret keys don't work
-    REQUIRE_THROWS( secret_key->paserkWrap(public_key.get()) );
-    REQUIRE_THROWS( secret_key->paserkWrap(secret_key.get()) );
-
-    // check for other version, but local keys
-    {
-        auto key3 = paseto::KeyGen::generate(paseto::KeyType::V3_LOCAL);
-        auto key4 = paseto::KeyGen::generate(paseto::KeyType::V4_LOCAL);
-
-        REQUIRE( key3->is_loaded() );
-        REQUIRE( key4->is_loaded() );
-
-        REQUIRE_THROWS( secret_key->paserkWrap(key3.get()) );
-        REQUIRE_THROWS( secret_key->paserkWrap(key4.get()) );
-    }
-}
-
-
-// local-pw
+// secret-pw
 TEST_CASE("paserk_v2secretpw_basic", "[paserk_v2secret]")
 {
-    struct paseto::PasswordParams params;
-    params.params.v2.time = 1024;
-    params.params.v2.memory = 65536;
-    params.params.v2.parallelism = 1;
+    struct paseto::PasswordParams opts;
+    opts.params.v2.time = 1024;
+    opts.params.v2.memory = 65536;
+    opts.params.v2.parallelism = 1;
     auto [ public_key, secret_key ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
 
     // wrap the key with a password
-    auto key_pw = secret_key->paserkPasswordWrap("test-pass", &params);
+    auto key_pw = paserk::passwordWrap(secret_key.get(), "test-pass", &opts);
 
     REQUIRE( key_pw.compare(0, paserk_pw.length(), paserk_pw) == 0 );
 
     // restore the key from the password-wrapped key
-    auto restored_key = paseto::Keys::create(paseto::KeyType::V2_SECRET);
-    restored_key->paserkPasswordUnwrap(key_pw, "test-pass");
+    auto restored_key = paserk::passwordUnwrap(key_pw, "test-pass");
 
+    REQUIRE( restored_key->is_loaded() );
+    REQUIRE( restored_key->keyType() == paseto::KeyType::V2_SECRET );
     REQUIRE( *secret_key == *restored_key );
 }
 
 
 TEST_CASE("paserk_v2secretpw_noparams", "[paserk_v2secret]")
 {
+    struct paseto::PasswordParams opts;
+    opts.params.v2.time = 1024;
+    opts.params.v2.memory = 65536;
+    opts.params.v2.parallelism = 1;
     auto [ public_key, secret_key ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
 
     // wrap the key with a password
-    REQUIRE_THROWS( secret_key->paserkPasswordWrap("test-pass", nullptr) );
+    REQUIRE_THROWS( paserk::passwordWrap(nullptr, "test-pass", &opts) );
+    REQUIRE_THROWS( paserk::passwordWrap(secret_key.get(), "test-pass", nullptr) );
+}
+
+
+TEST_CASE("paserk_v2secretpw_badpassword", "[paserk_v2secret]")
+{
+    struct paseto::PasswordParams opts;
+    opts.params.v2.time = 1024;
+    opts.params.v2.memory = 65536;
+    opts.params.v2.parallelism = 1;
+    auto [ public_key, secret_key ] =
+        paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
+
+    // wrap the key with a password
+    auto paserk_pw = paserk::passwordWrap(secret_key.get(), "test-pass", &opts);
+
+    REQUIRE_THROWS( paserk::passwordUnwrap(paserk_pw, "bad-password!") );
 }
 
 
@@ -225,29 +178,9 @@ TEST_CASE("paserk_v2secretpw_lucidity", "[paserk_v2secret]")
     opts.params.v2.time = 1024;
     opts.params.v2.memory = 65536;
     opts.params.v2.parallelism = 1;
-    auto local_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
-
     auto [ public_key, secret_key ] =
         paseto::KeyGen::generatePair(paseto::KeyType::V2_PUBLIC);
 
-    // wrap the key with a password
-    auto key_pw = secret_key->paserkPasswordWrap("test-pass", &opts);
-
-    // same version, public keys can't use password wrapping
-    REQUIRE_THROWS( public_key->paserkPasswordWrap("test-pass", &opts) );
-
-    // local/public keys cannot be recipients
-    REQUIRE_THROWS( local_key->paserkPasswordUnwrap(key_pw, "test-pass") );
-    REQUIRE_THROWS( public_key->paserkPasswordUnwrap(key_pw, "test-pass") );
-
-    // check for other version, but secret keys
-    {
-        auto [ public_key3, secret_key3 ] =
-            paseto::KeyGen::generatePair(paseto::KeyType::V3_PUBLIC);
-        auto [ public_key4, secret_key4 ] =
-            paseto::KeyGen::generatePair(paseto::KeyType::V4_PUBLIC);
-
-        REQUIRE_THROWS( secret_key3->paserkPasswordUnwrap(key_pw, "test-pass") );
-        REQUIRE_THROWS( secret_key4->paserkPasswordUnwrap(key_pw, "test-pass") );
-    }
+    // same version, can't wrap public keys
+    REQUIRE_THROWS( paserk::passwordWrap(public_key.get(), "test-pass", &opts) );
 }

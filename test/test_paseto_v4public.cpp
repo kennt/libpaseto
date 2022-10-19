@@ -165,16 +165,21 @@ TEST_CASE("paseto_v4public_lucidity", "[paseto_v4public]")
     string data {"test data"};
 
     {
-        auto sealed_data = local_key->paserkSeal(public_key.get());    
-        REQUIRE_THROWS( public_key->paserkSeal(public_key.get()) );
-        REQUIRE_THROWS( public_key->paserkUnseal(sealed_data, secret_key.get()) );
+        auto sealed_data = public_key->seal(local_key.get());
+        REQUIRE_THROWS( public_key->seal(public_key.get()) );
+        REQUIRE_THROWS( public_key->seal(secret_key.get()) );
+        REQUIRE_THROWS( secret_key->seal(local_key.get()) );
+        REQUIRE_THROWS( secret_key->seal(secret_key.get()) );
+        REQUIRE_THROWS( secret_key->seal(public_key.get()) );
+        REQUIRE_THROWS( local_key->unseal(sealed_data) );
+        REQUIRE_THROWS( public_key->unseal(sealed_data) );
     }
 
     {
         auto wrapping_key = paseto::KeyGen::generate(paseto::KeyType::V4_LOCAL);
-        auto wrapped_data = local_key->paserkWrap(wrapping_key.get());
-        REQUIRE_THROWS( public_key->paserkWrap(wrapping_key.get()) );
-        REQUIRE_THROWS( public_key->paserkUnwrap(wrapped_data, wrapping_key.get()) );
+        auto wrapped_data = wrapping_key->wrap(local_key.get());
+        REQUIRE_THROWS( public_key->wrap(local_key.get()) );
+        REQUIRE_THROWS( public_key->unwrap(wrapped_data) );
     }
 
     {
@@ -183,9 +188,7 @@ TEST_CASE("paseto_v4public_lucidity", "[paseto_v4public]")
             opts.params.v4.time = 1024;
             opts.params.v4.memory = 65536;
             opts.params.v4.parallelism = 1;
-        auto password_wrapped_data = local_key->paserkPasswordWrap(password, &opts);
-        REQUIRE_THROWS( public_key->paserkPasswordWrap(password, &opts) );
-        REQUIRE_THROWS( public_key->paserkPasswordUnwrap(password_wrapped_data, password) );
+        REQUIRE_THROWS( paserk::passwordWrap(public_key.get(), password, &opts) );
     }
 }
 
