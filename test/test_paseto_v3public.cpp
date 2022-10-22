@@ -187,6 +187,6 @@ TEST_CASE("paseto_v3public_lucidity", "[paseto_v3public]")
             opts.params.v3.iterations = 10000;
         REQUIRE_THROWS( paserk::passwordWrap(public_key.get(), password, &opts) );
     }
+
+    REQUIRE_THROWS( public_key->getPublicKey() );
 }
-
-

@@ -22,7 +22,6 @@ extern "C" {
 
 #include <iostream>
 
-#include "cryptopp/filters.h"
 #include "pem.h"
 
 namespace paseto {
@@ -355,7 +354,9 @@ inline KeyType makeKeyType(int version, const char *purpose)
     else if (strcmp(purpose, "secret") == 0) kt += 2;
     else if (strcmp(purpose, "local") == 0) kt += 0;
     else
-        throw UnexpectedException("unexpected: ");
+        throw UnexpectedException(
+            fmt::format("Unexpected: unknown purpose: {} (line {})",
+                purpose, __LINE__));
     return static_cast<KeyType>(kt);
 }
 
@@ -409,6 +410,18 @@ public:
     {
         return _footer;
     }
+
+#if 0
+    Token &add_claim(const std::string &header, const std::string &data);
+    Token &issuer(const std::string data);
+    Token &subject();
+    Token &audience();
+    Token &expiration();
+    Token &not_before();
+    Token &issued_at();
+    Token &token_id();
+#endif
+
 private:
     KeyType _key_type;
     binary _payload;
@@ -570,23 +583,12 @@ public:
                 KeyTypeToString(_key_type), __LINE__));
     }
 
-    void _checkExpectedKeyType(const char *operation_desc,
-        int expected_version, const char *expected_purpose,
-        KeyType kt)
+    virtual std::unique_ptr<Key> getPublicKey()
     {
-        // Only keys of the same version are allowed
-        if (expected_version != KeyTypeVersion(kt))
-            throw UnexpectedException(
-                fmt::format("unexpected: {} : key version mismatch: actual:{} expected:{}",
-                    operation_desc,
-                    KeyTypeVersion(kt), expected_version));
-        if (strcmp(KeyTypePurpose(kt), expected_purpose) != 0)
-            throw UnexpectedException(
-                fmt::format("unexpected: {} : must be a {} key: actual:{}",
-                    operation_desc, expected_purpose,
-                    KeyTypePurpose(kt)));
+        throw InvalidKeyException(
+            fmt::format("InvalidKey: only SECRET keys have PUBLIC keys:{} (line {})",
+                KeyTypeToString(_key_type), __LINE__));
     }
-
 
 #ifdef DEBUG
     void setNonce(const std::string &nonce_hex, const binary_view &payload)
@@ -635,6 +637,25 @@ public:
     }
 
 protected:
+
+    void _checkExpectedKeyType(const char *operation_desc,
+        int expected_version, const char *expected_purpose,
+        KeyType kt)
+    {
+        // Only keys of the same version are allowed
+        if (expected_version != KeyTypeVersion(kt))
+            throw UnexpectedException(
+                fmt::format("unexpected: {} : key version mismatch: actual:{} expected:{}",
+                    operation_desc,
+                    KeyTypeVersion(kt), expected_version));
+        if (strcmp(KeyTypePurpose(kt), expected_purpose) != 0)
+            throw UnexpectedException(
+                fmt::format("unexpected: {} : must be a {} key: actual:{}",
+                    operation_desc, expected_purpose,
+                    KeyTypePurpose(kt)));
+    }
+
+
     bool _is_loaded;
     binary _data;
     size_t _required_length;
@@ -757,7 +778,6 @@ void loadPaserk(paseto::Key *key,
 
 
 template<typename T, auto tolocalpaserk, auto fromlocalpaserk,
-         auto topublicpaserk, auto frompublicpaserk,
          auto tosecretpaserk, auto fromsecretpaserk,
          auto fnconvert>
 class LocalKeyPaserkImpl : public Key
@@ -768,6 +788,7 @@ public:
         return buildPaserk<T, tolocalpaserk>(this,
             fmt::format("k{}.local.", KeyTypeVersion(this->keyType())), NULL, 0, NULL);
     }
+
     void fromPaserk(const std::string &paserk) override
     {
         loadPaserk<T, fromlocalpaserk>(this,
@@ -838,7 +859,9 @@ public:
                 paserk, this->data(), this->size());
         }
         else
-            throw UnexpectedException("unexpected: ");
+            throw UnexpectedException(
+                fmt::format("Unexpected: unknown paserk header: {} ({})",
+                    paserk, __LINE__));
 
         key->set_is_loaded(true);
         return key;
@@ -849,11 +872,9 @@ public:
 
 template<typename T, enum KeyType key_type, size_t key_length,
          auto fencrypt, auto fdecrypt, auto tolocalpaserk, auto fromlocalpaserk,
-         auto topublicpaserk, auto frompublicpaserk,
          auto tosecretpaserk, auto fromsecretpaserk,
          auto fnconvert>
 class LocalKey : public LocalKeyPaserkImpl<T, tolocalpaserk, fromlocalpaserk,
-                                            topublicpaserk, frompublicpaserk,
                                             tosecretpaserk, fromsecretpaserk,
                                             fnconvert>
 {
@@ -925,7 +946,6 @@ protected:
 
 template<typename T, auto tolocalpaserk, auto fromlocalpaserk,
          auto topublicpaserk, auto frompublicpaserk,
-         auto tosecretpaserk, auto fromsecretpaserk,
          auto fnconvert>
 class PublicKeyPaserkImpl : public Key
 {
@@ -973,11 +993,9 @@ public:
 template<typename T, enum KeyType key_type, size_t key_length,
         auto fverify, auto tolocalpaserk, auto fromlocalpaserk,
         auto topublicpaserk, auto frompublicpaserk,
-        auto tosecretpaserk, auto fromsecretpaserk,
         auto fnconvert>
 class PublicKey : public PublicKeyPaserkImpl<T, tolocalpaserk, fromlocalpaserk,
                                             topublicpaserk, frompublicpaserk,
-                                            tosecretpaserk, fromsecretpaserk,
                                             fnconvert>
 {
 public:
@@ -1019,8 +1037,8 @@ protected:
 
 
 template<typename T, auto tolocalpaserk, auto fromlocalpaserk,
-        auto topublicpaserk, auto frompublicpaserk,
         auto tosecretpaserk, auto fromsecretpaserk,
+        auto fsecretkeytopublickey,
         auto fnconvert>
 class SecretKeyPaserkImpl : public Key
 {
@@ -1059,17 +1077,31 @@ public:
         key->set_is_loaded(true);
         return key;
     }
+
+    std::unique_ptr<Key> getPublicKey() override
+    {
+        this->checkKey();
+
+        auto key = Key::create(makeKeyType(KeyTypeVersion(this->keyType()), "public"));
+        key->clear();   // reserve the space for the key data
+
+        fsecretkeytopublickey(key->data(), key->size(), this->data(), this->size());
+
+        key->set_is_loaded(true);
+        return key;
+    }
+
 };
 
 
 template<typename T, enum KeyType key_type, size_t key_length,
          auto fsign, auto tolocalpaserk, auto fromlocalpaserk,
-         auto topublicpaserk, auto frompublicpaserk,
          auto tosecretpaserk, auto fromsecretpaserk,
+         auto fsecretkeytopublickey,
          auto fnconvert>
 class SecretKey : public SecretKeyPaserkImpl<T, tolocalpaserk, fromlocalpaserk,
-                                            topublicpaserk, frompublicpaserk,
                                             tosecretpaserk, fromsecretpaserk,
+                                            fsecretkeytopublickey,
                                             fnconvert>
 {
 public:
@@ -1114,11 +1146,9 @@ protected:
 template<typename T, enum KeyType key_type, size_t key_length,
          auto fencrypt, auto fdecrypt,
          auto tolocalpaserk, auto fromlocalpaserk,
-         auto topublicpaserk, auto frompublicpaserk,
          auto tosecretpaserk, auto fromsecretpaserk,
          auto fnconvert>
 class LocalKey2 : public LocalKeyPaserkImpl<T, tolocalpaserk, fromlocalpaserk,
-                                            topublicpaserk, frompublicpaserk,
                                             tosecretpaserk, fromsecretpaserk,
                                             fnconvert>
 {
@@ -1183,11 +1213,9 @@ public:
 template<typename T, enum KeyType key_type, size_t key_length,
          auto fverify, auto tolocalpaserk, auto fromlocalpaserk,
          auto topublicpaserk, auto frompublicpaserk,
-         auto tosecretpaserk, auto fromsecretpaserk,
          auto fnconvert>
 class PublicKey2 : public PublicKeyPaserkImpl<T, tolocalpaserk, fromlocalpaserk,
                                             topublicpaserk, frompublicpaserk,
-                                            tosecretpaserk, fromsecretpaserk,
                                             fnconvert>
 {
 public:
@@ -1225,12 +1253,12 @@ public:
 
 template<typename T, enum KeyType key_type, size_t key_length,
          auto fsign, auto tolocalpaserk, auto fromlocalpaserk,
-         auto topublicpaserk, auto frompublicpaserk,
          auto tosecretpaserk, auto fromsecretpaserk,
+         auto fsecretkeytopublickey,
          auto fnconvert>
 class SecretKey2 : public SecretKeyPaserkImpl<T, tolocalpaserk, fromlocalpaserk,
-                                            topublicpaserk, frompublicpaserk,
                                             tosecretpaserk, fromsecretpaserk,
+                                            fsecretkeytopublickey,
                                             fnconvert>
 {
 public:
@@ -1273,8 +1301,6 @@ typedef LocalKey<v2PasswordParams,
             paseto_v2_local_decrypt,
             paseto_v2_local_key_to_paserk,
             paseto_v2_local_key_from_paserk,
-            paseto_v2_public_key_to_paserk,
-            paseto_v2_public_key_from_paserk,
             paseto_v2_secret_key_to_paserk,
             paseto_v2_secret_key_from_paserk,
             convert_v2> PasetoV2LocalKey;
@@ -1286,8 +1312,6 @@ typedef PublicKey<v2PasswordParams,
             paseto_v2_local_key_from_paserk,
             paseto_v2_public_key_to_paserk,
             paseto_v2_public_key_from_paserk,
-            paseto_v2_secret_key_to_paserk,
-            paseto_v2_secret_key_from_paserk,
             convert_v2> PasetoV2PublicKey;
 typedef SecretKey<v2PasswordParams,
             KeyType::V2_SECRET,
@@ -1295,10 +1319,9 @@ typedef SecretKey<v2PasswordParams,
             paseto_v2_public_sign,
             paseto_v2_local_key_to_paserk,
             paseto_v2_local_key_from_paserk,
-            paseto_v2_public_key_to_paserk,
-            paseto_v2_public_key_from_paserk,
             paseto_v2_secret_key_to_paserk,
             paseto_v2_secret_key_from_paserk,
+            paseto_v2_secret_key_to_public_key,
             convert_v2> PasetoV2SecretKey;
 
 typedef LocalKey2<v3PasswordParams,
@@ -1308,8 +1331,6 @@ typedef LocalKey2<v3PasswordParams,
             paseto_v3_local_decrypt,
             paseto_v3_local_key_to_paserk,
             paseto_v3_local_key_from_paserk,
-            paseto_v3_public_key_to_paserk,
-            paseto_v3_public_key_from_paserk,
             paseto_v3_secret_key_to_paserk,
             paseto_v3_secret_key_from_paserk,
             convert_v3> PasetoV3LocalKey;
@@ -1321,8 +1342,6 @@ typedef PublicKey2<v3PasswordParams,
             paseto_v3_local_key_from_paserk,
             paseto_v3_public_key_to_paserk,
             paseto_v3_public_key_from_paserk,
-            paseto_v3_secret_key_to_paserk,
-            paseto_v3_secret_key_from_paserk,
             convert_v3> PasetoV3PublicKey;
 typedef SecretKey2<v3PasswordParams,
             KeyType::V3_SECRET,
@@ -1330,10 +1349,9 @@ typedef SecretKey2<v3PasswordParams,
             paseto_v3_public_sign,
             paseto_v3_local_key_to_paserk,
             paseto_v3_local_key_from_paserk,
-            paseto_v3_public_key_to_paserk,
-            paseto_v3_public_key_from_paserk,
             paseto_v3_secret_key_to_paserk,
             paseto_v3_secret_key_from_paserk,
+            paseto_v3_secret_key_to_public_key,
             convert_v3> PasetoV3SecretKey;
 
 typedef LocalKey2<v4PasswordParams,
@@ -1343,8 +1361,6 @@ typedef LocalKey2<v4PasswordParams,
             paseto_v4_local_decrypt,
             paseto_v4_local_key_to_paserk,
             paseto_v4_local_key_from_paserk,
-            paseto_v4_public_key_to_paserk,
-            paseto_v4_public_key_from_paserk,
             paseto_v4_secret_key_to_paserk,
             paseto_v4_secret_key_from_paserk,
             convert_v4> PasetoV4LocalKey;
@@ -1356,8 +1372,6 @@ typedef PublicKey2<v4PasswordParams,
             paseto_v4_local_key_from_paserk,
             paseto_v4_public_key_to_paserk,
             paseto_v4_public_key_from_paserk,
-            paseto_v4_secret_key_to_paserk,
-            paseto_v4_secret_key_from_paserk,
             convert_v4> PasetoV4PublicKey;
 typedef SecretKey2<v4PasswordParams,
             KeyType::V4_SECRET,
@@ -1365,10 +1379,9 @@ typedef SecretKey2<v4PasswordParams,
             paseto_v4_public_sign,
             paseto_v4_local_key_to_paserk,
             paseto_v4_local_key_from_paserk,
-            paseto_v4_public_key_to_paserk,
-            paseto_v4_public_key_from_paserk,
             paseto_v4_secret_key_to_paserk,
             paseto_v4_secret_key_from_paserk,
+            paseto_v4_secret_key_to_public_key,
             convert_v4> PasetoV4SecretKey;
 
 class Keys
@@ -1563,7 +1576,7 @@ inline std::string passwordWrap(paseto::Key *key, const std::string &pw, struct 
         throw UnexpectedException("unexpected: a local or secret key must be provided");
 
     if (opts == NULL)
-        throw UnexpectedException("unexpected: ");
+        throw UnexpectedException("unexpected: PasswordParams must be provided");
 
     KeyType kt = key->keyType();
     if (!isKeyTypeLocal(kt) && !isKeyTypeSecret(kt))
@@ -1606,7 +1619,8 @@ inline std::string passwordWrap(paseto::Key *key, const std::string &pw, struct 
                 reinterpret_cast<const uint8_t *>(pw.data()), pw.size(),
                 paseto::convert_v4(opts));
         default:
-            throw InvalidKeyException("invalid-key: ");
+            throw InvalidKeyException(
+                fmt::format("invalid-key: only LOCAL/SECRET keys can be password-wrapped"));
     }
 }
 
@@ -1678,7 +1692,8 @@ inline std::unique_ptr<paseto::Key> passwordUnwrap(const std::string &paserk_key
         key->set_is_loaded(true);
     }
     else
-        throw UnexpectedException("unexpected: ");
+        throw InvalidKeyException(
+                fmt::format("invalid-key: only LOCAL/SECRET keys can be password-wrapped"));
 
     return key;
 }

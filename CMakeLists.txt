@@ -273,7 +273,7 @@ foreach(EXAMPLE ${EXAMPLES})
 endforeach()
 
 
-set(CPPEXAMPLES cppexample cppexample2)
+set(CPPEXAMPLES cppexample)
 foreach(CPPEXAMPLE ${CPPEXAMPLES})
 	add_executable(${CPPEXAMPLE} examples/${CPPEXAMPLE}.cpp)
 	target_link_libraries(${CPPEXAMPLE}

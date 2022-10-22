@@ -156,9 +156,8 @@ TEST_CASE("paseto_v4local_loadFrom", "[paseto_v4local]")
 }
 
 
-// V4_LOCAL supports all of the paserk apis
-#if 0
 TEST_CASE("paseto_v4local_lucidity", "[paseto_v4local]")
 {
+    auto local_key = paseto::KeyGen::generate(paseto::KeyType::V4_LOCAL);
+    REQUIRE_THROWS( local_key->getPublicKey() );
 }
-#endif

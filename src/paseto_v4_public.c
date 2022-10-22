@@ -51,6 +51,17 @@ bool paseto_v4_public_load_secret_key_base64(
     return key_load_base64(key, paseto_v4_PUBLIC_SECRETKEYBYTES, key_base64);
 }
 
+
+bool paseto_v4_secret_key_to_public_key(
+        uint8_t *public_key, size_t public_key_len,
+        const uint8_t *secret_key, size_t secret_key_len
+        )
+{
+    return paseto_v2_secret_key_to_public_key(
+        public_key, public_key_len, secret_key, secret_key_len);
+}
+
+
 bool paseto_v4_public_generate_keys(
         const uint8_t *seed, size_t seed_len,
         uint8_t *public_key, size_t public_key_len,

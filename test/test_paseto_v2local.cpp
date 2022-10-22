@@ -146,9 +146,8 @@ TEST_CASE("paseto_v2local_loadFrom", "[paseto_v2local]")
 }
 
 
-// V2_LOCAL supports all of the paserk apis
-#if 0
 TEST_CASE("paseto_v2local_lucidity", "[paseto_v2local]")
 {
+    auto local_key = paseto::KeyGen::generate(paseto::KeyType::V2_LOCAL);
+    REQUIRE_THROWS( local_key->getPublicKey() );
 }
-#endif

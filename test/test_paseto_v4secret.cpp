@@ -166,3 +166,15 @@ TEST_CASE("paseto_v4secret_lucidity", "[paseto_v4secret]")
         REQUIRE_THROWS( local_key->unseal(sealed_data) );
     }
 }
+
+
+TEST_CASE("paseto_v4secret_getPublicKey", "[paseto_v4secret]")
+{
+    auto [ public_key, secret_key ] =
+        paseto::KeyGen::generatePair(paseto::KeyType::V4_PUBLIC);
+
+    auto key = secret_key->getPublicKey();
+
+    REQUIRE( key->keyType() == paseto::KeyType::V4_PUBLIC );
+    REQUIRE( *key == *public_key );
+}

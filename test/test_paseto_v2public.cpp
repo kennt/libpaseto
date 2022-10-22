@@ -181,6 +181,8 @@ TEST_CASE("paseto_v2public_lucidity", "[paseto_v2public]")
             opts.params.v2.parallelism = 1;
         REQUIRE_THROWS( paserk::passwordWrap(public_key.get(), password, &opts) );
     }
+
+    REQUIRE_THROWS( public_key->getPublicKey() );
 }
 
 

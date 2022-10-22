@@ -48,6 +48,19 @@ bool paseto_v2_public_load_secret_key_base64(
     return key_load_base64(key, paseto_v2_PUBLIC_SECRETKEYBYTES, key_base64);
 }
 
+bool paseto_v2_secret_key_to_public_key(
+        uint8_t *public_key, size_t public_key_len,
+        const uint8_t *secret_key, size_t secret_key_len
+        )
+{
+    if (public_key_len != crypto_sign_PUBLICKEYBYTES ||
+        secret_key_len != crypto_sign_SECRETKEYBYTES)
+        return false;
+
+    crypto_sign_ed25519_sk_to_pk(public_key, secret_key);
+    return true;
+}
+
 bool paseto_v2_public_generate_keys(
         const uint8_t *seed, size_t seed_len,
         uint8_t *public_key, size_t public_key_len,

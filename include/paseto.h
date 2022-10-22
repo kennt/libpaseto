@@ -142,6 +142,13 @@ uint8_t *paseto_v2_public_verify(
         const uint8_t key[paseto_v2_PUBLIC_PUBLICKEYBYTES],
         uint8_t **footer, size_t *footer_len);
 
+/**
+ * Extracts the public key from the secret key.
+ */
+bool paseto_v2_secret_key_to_public_key(
+        uint8_t *public_key, size_t public_key_len,
+        const uint8_t *secret_key, size_t secret_key_len
+        );
 
 bool paseto_v2_public_generate_keys(
         const uint8_t *seed, size_t seed_len,
@@ -184,6 +191,14 @@ bool paseto_v3_public_load_secret_key_hex(
 bool paseto_v3_public_load_secret_key_base64(
         uint8_t key[paseto_v3_PUBLIC_SECRETKEYBYTES],
         const char *key_base64);
+
+/**
+ * Extracts the public key from the secret key.
+ */
+bool paseto_v3_secret_key_to_public_key(
+        uint8_t *public_key, size_t public_key_len,
+        const uint8_t *secret_key, size_t secret_key_len
+        );
 
 bool paseto_v3_public_generate_keys(
         const uint8_t *seed, size_t seed_len,
@@ -239,6 +254,14 @@ bool paseto_v4_public_load_secret_key_hex(
 bool paseto_v4_public_load_secret_key_base64(
         uint8_t key[paseto_v4_PUBLIC_SECRETKEYBYTES],
         const char *key_base64);
+
+/**
+ * Extracts the public key from the secret key.
+ */
+bool paseto_v4_secret_key_to_public_key(
+        uint8_t *public_key, size_t public_key_len,
+        const uint8_t *secret_key, size_t secret_key_len
+        );
 
 bool paseto_v4_public_generate_keys(
         const uint8_t *seed, size_t seed_len,

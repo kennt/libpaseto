@@ -71,6 +71,45 @@ bool paseto_v3_public_load_secret_key_base64(
 }
 
 
+bool paseto_v3_secret_key_to_public_key(
+    uint8_t *public_key, size_t public_key_len,
+    const uint8_t *secret_key, size_t secret_key_len)
+{
+    if (public_key_len != P384_COMPRESSED_PUBLICKEYBYTES ||
+        secret_key_len != P384_SECRETKEYBYTES)
+    {
+        errno = EINVAL;
+        return false;
+    }
+
+    ECDSA_RFC6979<ECP,SHA384>::PrivateKey seckey;
+    ECDSA_RFC6979<ECP,SHA384>::PublicKey pubkey;
+    AutoSeededRandomPool prng;
+
+    /* Initialize the sk */
+    Integer x {secret_key, P384_SECRETKEYBYTES};
+    seckey.Initialize(CryptoPP::ASN1::secp384r1(), x);
+
+    if (!seckey.Validate(prng, 3))
+    {
+        fprintf(stderr, "secret key validate() failed (%d)\n", __LINE__);
+        errno = EINVAL;
+        return false;
+    }
+
+    /* get the pk from the sk */
+    seckey.MakePublicKey(pubkey);
+
+    /* save as point-compressed */
+    std::string pubkey_hex;
+    pubkey_hex = p384_publickey_to_hex(pubkey);
+    key_load_hex(public_key, public_key_len, pubkey_hex.c_str());
+
+    sodium_memzero(pubkey_hex.data(), pubkey_hex.length());
+    return true;
+}
+
+
 bool paseto_v3_public_generate_keys(
         const uint8_t *seed, size_t seed_len,
         uint8_t *public_key, size_t public_key_len,
